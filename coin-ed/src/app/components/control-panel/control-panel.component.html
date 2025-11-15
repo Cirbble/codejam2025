@@ -3,7 +3,7 @@
     <!-- Web Scraper Toggle -->
     <div class="control-item">
       <label class="toggle-label">
-        <span class="control-name">🌐 Web Scraper</span>
+        <span class="control-name">Web Scraper</span>
         <label class="toggle-switch">
           <input
             type="checkbox"
@@ -22,9 +22,9 @@
     <div class="control-item" [class.locked]="!dataService.agentControls().scraperEnabled">
       <label class="toggle-label" [class.disabled]="!dataService.agentControls().scraperEnabled">
         <span class="control-name">
-          💰 AI Buyer
+          AI Buyer
           @if (!dataService.agentControls().scraperEnabled) {
-            <span class="lock-icon">🔒</span>
+            <span class="lock-icon">LOCKED</span>
           }
         </span>
         <label class="toggle-switch">
@@ -46,9 +46,9 @@
     <div class="control-item" [class.locked]="!dataService.agentControls().scraperEnabled">
       <label class="toggle-label" [class.disabled]="!dataService.agentControls().scraperEnabled">
         <span class="control-name">
-          💸 AI Seller
+          AI Seller
           @if (!dataService.agentControls().scraperEnabled) {
-            <span class="lock-icon">🔒</span>
+            <span class="lock-icon">LOCKED</span>
           }
         </span>
         <label class="toggle-switch">

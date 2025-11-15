@@ -27,17 +27,6 @@
     </span>
   </div>
 
-  <div class="mini-chart">
-    <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-      <polyline
-        [attr.points]="generateChartPoints()"
-        fill="none"
-        [attr.stroke]="coin.changePercentage > 0 ? '#6B8AFF' : '#888'"
-        stroke-width="2"
-      />
-    </svg>
-  </div>
-
   @if (coin.hype !== undefined || coin.communityHype !== undefined || coin.popularity !== undefined) {
     <div class="sentiment-section">
       <div class="sentiment-header">

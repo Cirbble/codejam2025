@@ -7,6 +7,7 @@ import { ControlPanelComponent } from '../control-panel/control-panel.component'
 import { CoinCardComponent } from '../coin-card/coin-card.component';
 import { PortfolioComponent } from '../portfolio/portfolio.component';
 import { ChartComponent } from '../chart/chart.component';
+import { PostDisplayComponent } from '../post-display/post-display';
 
 @Component({
   selector: 'app-dashboard',
@@ -16,7 +17,8 @@ import { ChartComponent } from '../chart/chart.component';
     ControlPanelComponent,
     CoinCardComponent,
     PortfolioComponent,
-    ChartComponent
+    ChartComponent,
+    PostDisplayComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
@@ -30,7 +32,7 @@ export class DashboardComponent {
   recentlyUpdatedCoins: Set<string> = new Set();
 
   loadExampleData(): void {
-    this.dataLoader.loadFromFile('/example-data.json');
+    this.dataLoader.loadFromFile('/coin-data.json');
     // Mark newly loaded coins as recently updated
     setTimeout(() => {
       const coins = this.dataService.coins();
@@ -44,6 +46,11 @@ export class DashboardComponent {
         this.recentlyUpdatedCoins.clear();
       }, 5000);
     }, 100);
+  }
+
+  refreshPrices(): void {
+    console.log('Fetching prices from PumpPortal...');
+    this.dataService.fetchAllPumpPortalPrices();
   }
 
   getSortedCoins() {

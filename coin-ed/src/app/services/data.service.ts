@@ -1,10 +1,14 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { Coin, Portfolio, SentimentData, AgentControls, PortfolioCoin } from '../models/coin.model';
+import { PumpPortalService } from './pump-portal';
+import { getTokenAddress } from '../config/token-addresses';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DataService {
+  private pumpPortal = inject(PumpPortalService);
+
   // Signals for reactive state management
   coins = signal<Coin[]>([]);
   portfolio = signal<Portfolio>({ totalBalance: 0, coins: [] });
@@ -16,8 +20,8 @@ export class DataService {
   });
 
   constructor() {
-    // Initialize with mock data
-    this.initializeMockData();
+    // Load data from coin-data.json
+    this.loadCoinData();
   }
 
   /**
@@ -55,7 +59,8 @@ export class DataService {
         chartData: item.chartData || coins[existingCoinIndex].chartData,
         hype: item.raw_sentiment_score !== undefined ? item.raw_sentiment_score : coins[existingCoinIndex].hype,
         communityHype: item.aggregate_sentiment_score !== undefined ? item.aggregate_sentiment_score : coins[existingCoinIndex].communityHype,
-        popularity: item.engagement_score !== undefined ? item.engagement_score : coins[existingCoinIndex].popularity
+        popularity: item.engagement_score !== undefined ? item.engagement_score : coins[existingCoinIndex].popularity,
+        latestPost: this.extractPostData(item) || coins[existingCoinIndex].latestPost
       };
       this.coins.set(coins);
     } else {
@@ -72,7 +77,8 @@ export class DataService {
         icon: item.icon || '',
         hype: item.raw_sentiment_score,
         communityHype: item.aggregate_sentiment_score,
-        popularity: item.engagement_score
+        popularity: item.engagement_score,
+        latestPost: this.extractPostData(item)
       };
       this.coins.set([...this.coins(), newCoin]);
     }
@@ -145,70 +151,36 @@ export class DataService {
   }
 
   /**
-   * Initialize with mock data for demonstration
+   * Load coin data from coin-data.json file
    */
-  private initializeMockData(): void {
-    const mockCoins: Coin[] = [
-      {
-        id: 'bitcoin',
-        name: 'Bitcoin',
-        symbol: 'BTC',
-        price: 52291,
-        balance: 52291,
-        feedback: 'Feedback',
-        changePercentage: 0.25,
+  private async loadCoinData(): Promise<void> {
+    try {
+      const response = await fetch('/coin-data.json');
+      const coinDataArray = await response.json();
+      
+      const coins: Coin[] = coinDataArray.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        symbol: item.symbol,
+        price: item.price,
+        balance: item.balance,
+        feedback: item.feedback,
+        changePercentage: item.changePercentage,
         chartData: this.generateMockChartData(),
-        icon: '₿',
-        hype: 0.75,
-        communityHype: 0.82,
-        popularity: 0.68
-      },
-      {
-        id: 'litecoin',
-        name: 'Litecoin',
-        symbol: 'LTC',
-        price: 8291,
-        balance: 8291,
-        feedback: 'Feedback',
-        changePercentage: 0.15,
-        chartData: this.generateMockChartData(),
-        icon: 'Ł',
-        hype: 0.45,
-        communityHype: 0.52,
-        popularity: 0.38
-      },
-      {
-        id: 'ethereum',
-        name: 'Ethereum',
-        symbol: 'ETH',
-        price: 28291,
-        balance: 28291,
-        feedback: 'Feedback',
-        changePercentage: 0.25,
-        chartData: this.generateMockChartData(),
-        icon: 'Ξ',
-        hype: 0.88,
-        communityHype: 0.91,
-        popularity: 0.85
-      },
-      {
-        id: 'solana',
-        name: 'Solana',
-        symbol: 'SOL',
-        price: 14291,
-        balance: 14291,
-        feedback: 'Feedback',
-        changePercentage: -0.25,
-        chartData: this.generateMockChartData(),
-        icon: '◎',
-        hype: 0.32,
-        communityHype: 0.28,
-        popularity: 0.41
-      }
-    ];
+        icon: item.icon,
+        hype: item.raw_sentiment_score,
+        communityHype: item.aggregate_sentiment_score,
+        popularity: item.engagement_score,
+        latestPost: this.extractPostData(item)
+      }));
 
-    this.coins.set(mockCoins);
-    this.updatePortfolio();
+      this.coins.set(coins);
+      this.updatePortfolio();
+    } catch (error) {
+      console.error('Error loading coin data:', error);
+      // Fallback to empty array if file can't be loaded
+      this.coins.set([]);
+    }
   }
 
   /**
@@ -222,6 +194,88 @@ export class DataService {
       data.push(base);
     }
     return data;
+  }
+
+  /**
+   * Extract post data from scraped item
+   */
+  private extractPostData(item: any): any {
+    // Check if item has post-like structure from sentiment.json
+    if (item.title && item.source && item.platform) {
+      const postData = {
+        id: item.id,
+        source: item.source,
+        platform: item.platform,
+        title: item.title,
+        content: item.content || '',
+        author: item.author,
+        timestamp: item.timestamp,
+        post_age: item.post_age,
+        upvotes_likes: item.upvotes_likes || 0,
+        comment_count: item.comment_count || 0,
+        comments: Array.isArray(item.comments) ? item.comments : [],
+        link: item.link || ''
+      };
+      console.log('Extracted post data:', postData);
+      console.log('Comments count:', postData.comments.length);
+      return postData;
+    }
+    return undefined;
+  }
+
+  /**
+   * Fetch real-time price from PumpPortal for a coin
+   */
+  fetchPumpPortalPrice(coinSymbol: string): void {
+    const tokenAddress = getTokenAddress(coinSymbol);
+    
+    if (!tokenAddress) {
+      console.log(`No token address configured for ${coinSymbol}`);
+      return;
+    }
+
+    console.log(`Fetching price for ${coinSymbol} from PumpPortal...`);
+    
+    this.pumpPortal.getTokenInfo(tokenAddress).subscribe(tokenInfo => {
+      if (tokenInfo) {
+        const priceInSOL = this.pumpPortal.calculatePrice(tokenInfo);
+        const priceInUSD = tokenInfo.usd_market_cap / tokenInfo.total_supply;
+        
+        console.log(`${coinSymbol} Price:`, {
+          priceInSOL,
+          priceInUSD,
+          marketCap: tokenInfo.usd_market_cap,
+          totalSupply: tokenInfo.total_supply
+        });
+
+        // Update the coin with real price data
+        const coins = this.coins();
+        const coinIndex = coins.findIndex(c => c.symbol === coinSymbol);
+        
+        if (coinIndex >= 0) {
+          const updatedCoins = [...coins];
+          updatedCoins[coinIndex] = {
+            ...updatedCoins[coinIndex],
+            price: priceInUSD,
+            balance: priceInUSD // Update balance to match price for now
+          };
+          this.coins.set(updatedCoins);
+          this.updatePortfolio();
+        }
+      } else {
+        console.log(`Could not fetch price for ${coinSymbol}`);
+      }
+    });
+  }
+
+  /**
+   * Fetch prices for all coins that have token addresses configured
+   */
+  fetchAllPumpPortalPrices(): void {
+    const coins = this.coins();
+    coins.forEach(coin => {
+      this.fetchPumpPortalPrice(coin.symbol);
+    });
   }
 }
 

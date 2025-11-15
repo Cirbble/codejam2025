@@ -1,6 +1,7 @@
 import json
 from textblob import TextBlob
 import math
+import os
 
 def analyze_sentiment(text):
     """
@@ -59,72 +60,89 @@ def calculate_aggregate_sentiment(raw_sentiment, comments_avg, platform, upvotes
     
     return round(aggregate, 3)
 
-def process_json_file(input_file, output_file):
+def process_posts(input_file, output_file):
     """
-    Process JSON file and add sentiment scores.
+    Process scraped_posts.json and add sentiment scores.
+    Skips posts where token_name is null.
     """
+    # Get the directory of this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    input_path = os.path.join(script_dir, input_file)
+    output_path = os.path.join(script_dir, output_file)
+    
     # Read input JSON
-    with open(input_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    with open(input_path, 'r', encoding='utf-8') as f:
+        posts = json.load(f)
     
-    # Analyze title sentiment
-    title_sentiment = analyze_sentiment(data.get('title', ''))
+    processed_posts = []
+    skipped_count = 0
     
-    # Analyze content sentiment
-    content_sentiment = analyze_sentiment(data.get('content', ''))
-    
-    # Calculate raw_sentiment_score (title + content only)
-    if data.get('content', '').strip():
-        raw_sentiment = (title_sentiment * 0.6 + content_sentiment * 0.4)
-    else:
-        raw_sentiment = title_sentiment
-    
-    data['raw_sentiment_score'] = round(raw_sentiment, 3)
-    
-    # Analyze each comment and calculate average
-    comment_sentiments = []
-    if 'comments' in data and data['comments']:
-        for comment in data['comments']:
-            sentiment = analyze_sentiment(comment)
-            comment_sentiments.append(sentiment)
-    
-    comments_avg = sum(comment_sentiments) / len(comment_sentiments) if comment_sentiments else 0
-    
-    # Get engagement metrics
-    platform = data.get('platform', '')
-    upvotes = data.get('upvotes_likes', 0)
-    comment_count = data.get('comment_count', 0)
-    
-    # Platform-specific: use award_count for Reddit, share_count for Twitter
-    if platform.lower() == "reddit":
-        shares_or_awards = data.get('award_count', 0)
-    elif platform.lower() == "twitter":
-        shares_or_awards = data.get('share_count', 0)
-    else:
-        shares_or_awards = data.get('share_count', 0) or data.get('award_count', 0)
-    
-    # Calculate aggregate_sentiment_score
-    data['aggregate_sentiment_score'] = calculate_aggregate_sentiment(
-        raw_sentiment, comments_avg, platform, upvotes, shares_or_awards
-    )
-    
-    # Calculate engagement_score
-    data['engagement_score'] = calculate_engagement_score(
-        upvotes, comment_count, shares_or_awards
-    )
+    for post in posts:
+        # Skip posts where token_name is null
+        if post.get('token_name') is None or post.get('token_name') == 'null':
+            skipped_count += 1
+            print(f"Skipping post ID {post.get('id')} - token_name is null")
+            continue
+        
+        # Analyze title sentiment
+        title_sentiment = analyze_sentiment(post.get('title', ''))
+        
+        # Analyze content sentiment
+        content_sentiment = analyze_sentiment(post.get('content', ''))
+        
+        # Calculate raw_sentiment_score (title + content only)
+        if post.get('content', '').strip():
+            raw_sentiment = (title_sentiment * 0.6 + content_sentiment * 0.4)
+        else:
+            raw_sentiment = title_sentiment
+        
+        post['raw_sentiment_score'] = round(raw_sentiment, 3)
+        
+        # Analyze each comment and calculate average
+        comment_sentiments = []
+        if 'comments' in post and post['comments']:
+            for comment in post['comments']:
+                sentiment = analyze_sentiment(comment)
+                comment_sentiments.append(sentiment)
+        
+        comments_avg = sum(comment_sentiments) / len(comment_sentiments) if comment_sentiments else 0
+        
+        # Get engagement metrics
+        platform = post.get('platform', '')
+        upvotes = post.get('upvotes_likes', 0)
+        comment_count = post.get('comment_count', 0)
+        
+        # Platform-specific: use award_count for Reddit, share_count for Twitter
+        if platform.lower() == "reddit":
+            shares_or_awards = post.get('award_count', 0)
+        elif platform.lower() == "twitter":
+            shares_or_awards = post.get('share_count', 0)
+        else:
+            shares_or_awards = post.get('share_count', 0) or post.get('award_count', 0)
+        
+        # Calculate aggregate_sentiment_score
+        post['aggregate_sentiment_score'] = calculate_aggregate_sentiment(
+            raw_sentiment, comments_avg, platform, upvotes, shares_or_awards
+        )
+        
+        # Calculate engagement_score
+        post['engagement_score'] = calculate_engagement_score(
+            upvotes, comment_count, shares_or_awards
+        )
+        
+        processed_posts.append(post)
     
     # Write output JSON
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(processed_posts, f, indent=2, ensure_ascii=False)
     
-    print(f"Sentiment analysis complete!")
-    print(f"Raw sentiment score: {data['raw_sentiment_score']}")
-    print(f"Aggregate sentiment score: {data['aggregate_sentiment_score']}")
-    print(f"Engagement score: {data['engagement_score']}")
-    print(f"Output saved to: {output_file}")
+    print(f"\n=== Sentiment Analysis Complete ===")
+    print(f"Total posts processed: {len(processed_posts)}")
+    print(f"Posts skipped (null token_name): {skipped_count}")
+    print(f"Output saved to: {output_path}")
 
 if __name__ == "__main__":
-    input_file = "sample.json"
+    input_file = "scraped_posts.json"
     output_file = "sentiment.json"
     
-    process_json_file(input_file, output_file)
+    process_posts(input_file, output_file)

@@ -65,7 +65,10 @@
       <!-- Demo Button in Sidebar -->
       <div class="sidebar-footer">
         <button class="load-data-btn-small" (click)="loadExampleData()">
-          📊 Load Demo Data
+          Load Demo Data
+        </button>
+        <button class="load-data-btn-small refresh-btn" (click)="refreshPrices()">
+          Refresh Prices
         </button>
       </div>
     </aside>
@@ -82,7 +85,7 @@
       @if (selectedCoinId && getSelectedCoin()) {
         <section class="selected-coin-view">
           <app-coin-card [coin]="getSelectedCoin()!"></app-coin-card>
-          <app-chart></app-chart>
+          <app-post-display [post]="getSelectedCoin()!.latestPost"></app-post-display>
         </section>
       } @else {
         <!-- Coin Cards Grid -->
@@ -97,10 +100,9 @@
           }
         </section>
 
-        <!-- Bottom Grid: Portfolio + Chart -->
-        <section class="bottom-grid">
+        <!-- Portfolio Section -->
+        <section class="portfolio-section">
           <app-portfolio></app-portfolio>
-          <app-chart></app-chart>
         </section>
       }
     </main>
