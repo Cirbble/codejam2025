@@ -125,8 +125,13 @@ class RedditScraper:
         """
         
         try:
-            result = self.client.execute_script(script)
-            raw_posts = result if isinstance(result, list) else result.get("result", [])
+            # execute_script now has retry logic for execution context errors
+            result = self.client.execute_script(script, retries=2)
+            raw_posts = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
+            
+            if not raw_posts:
+                print(f"⚠️ No posts found on page (may have navigated during scraping)")
+                return []
             
             # Convert to Post objects
             posts = []
@@ -173,7 +178,11 @@ class RedditScraper:
             print(f"📊 Scraped {len(posts)} posts")
             return posts
         except Exception as e:
-            print(f"❌ Error scraping posts: {e}")
+            error_msg = str(e)
+            if "Execution context was destroyed" in error_msg:
+                print(f"❌ Error scraping posts: Page navigated during execution. This can happen if Reddit redirects or the page refreshes.")
+            else:
+                print(f"❌ Error scraping posts: {e}")
             return []
     
     def _start_image_description_async(self, post: Post) -> None:
@@ -199,17 +208,21 @@ class RedditScraper:
         """Start token identification agent task in background."""
         def run_agent():
             try:
-                token_name = self.agent_client.identify_token_name(
-                    (post.title or "") + " " + (post.content or "")
-                )
+                post_text = (post.title or "") + " " + (post.content or "")
+                print(f"  🔍 Identifying token for post {post.id}: {post.title[:50]}...")
+                token_name = self.agent_client.identify_token_name(post_text)
                 with self.lock:
                     if token_name and token_name.lower() != "unknown":
                         post.token_name = token_name
                         print(f"  ✅ Identified token for post {post.id}: {token_name}")
                         # Update JSON file
                         self._update_post_in_json(post)
+                    else:
+                        print(f"  ⚠️ No token identified for post {post.id} (agent returned: {token_name})")
             except Exception as e:
                 print(f"  ⚠️ Failed to identify token for post {post.id}: {e}")
+                import traceback
+                traceback.print_exc()
         
         thread = threading.Thread(target=run_agent, daemon=True)
         thread.start()
@@ -218,11 +231,19 @@ class RedditScraper:
         """Update a single post in the JSON file."""
         try:
             output_file = "scraped_posts.json"
+            all_posts = []
+            
+            # Try to read existing file
             if os.path.exists(output_file):
-                with open(output_file, 'r', encoding='utf-8') as f:
-                    all_posts = json.load(f)
-            else:
-                all_posts = []
+                try:
+                    with open(output_file, 'r', encoding='utf-8') as f:
+                        content = f.read().strip()
+                        if content:
+                            all_posts = json.loads(content)
+                        # If file is empty or invalid, start fresh
+                except (json.JSONDecodeError, ValueError) as e:
+                    print(f"  ⚠️ JSON file corrupted, starting fresh: {e}")
+                    all_posts = []
             
             # Find and update the post
             updated = False
@@ -241,9 +262,12 @@ class RedditScraper:
                 json.dump(all_posts, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"  ⚠️ Failed to update JSON for post {post.id}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _extract_text_from_image(self, post_url: str) -> str:
         """Use Agent API to describe what's in an image post.
+        Uses the current browser session if available to avoid Reddit blocking.
         
         Args:
             post_url: URL of the post with image
@@ -252,10 +276,25 @@ class RedditScraper:
             Description of the image content
         """
         try:
-            prompt = f"Navigate to {post_url} and describe what you see in the image. Focus on: what token/coin is mentioned, any prices or numbers, key text or information. Be concise - maximum 2-3 sentences."
-            print(f"     Creating agent task...")
-            task = self.agent_client.create_task(prompt, step_limit=10)  # Reduced steps for speed
-            print(f"     Task response: {task}")
+            # Try to use current browser session if available
+            cdp_url = None
+            if self.client.cdp_url:
+                cdp_url = self.client.cdp_url
+                # Use a prompt that works with the current page context
+                prompt = f"On the current page (URL: {post_url}), describe what you see in the image. Focus on: what token/coin is mentioned, any prices or numbers, key text or information. Be concise - maximum 2-3 sentences."
+                print(f"     Creating agent task with current session for image description...")
+            else:
+                # Fallback: navigate to URL (may get blocked)
+                prompt = f"Navigate to {post_url} and describe what you see in the image. Focus on: what token/coin is mentioned, any prices or numbers, key text or information. Be concise - maximum 2-3 sentences. If you encounter any errors or cannot access the page, return 'ERROR: Could not access page'."
+                print(f"     Creating agent task (new session) for image description...")
+            
+            try:
+                task = self.agent_client.create_task(prompt, step_limit=10, cdp_url=cdp_url)  # Pass CDP URL if available
+                print(f"     Task response: {task}")
+            except Exception as e:
+                print(f"     ❌ Failed to create agent task: {e}")
+                return ""
+            
             task_id = task.get("taskId") or task.get("id") or task.get("task_id")
             
             if not task_id:
@@ -357,8 +396,23 @@ class RedditScraper:
                             print(f"     Full data: {json.dumps(task_status.get('data', {}), indent=2, default=str)[:500]}")
                         return ""
                 elif state in ["failed", "error"]:
+                    failed_reason = task_status.get("failedReason", "")
                     error_msg = task_status.get("error", "") or task_status.get("message", "")
-                    print(f"     ❌ Task failed: {error_msg}")
+                    
+                    # Print failure reason prominently
+                    if failed_reason:
+                        print(f"     ❌ Task failed: {failed_reason}")
+                    elif error_msg:
+                        print(f"     ❌ Task failed: {error_msg}")
+                    else:
+                        print(f"     ❌ Task failed (no reason provided)")
+                    
+                    # Print full error details for debugging
+                    if failed_reason and failed_reason != error_msg:
+                        print(f"     🔍 Failed reason: {failed_reason}")
+                    if error_msg and error_msg != failed_reason:
+                        print(f"     🔍 Error details: {error_msg}")
+                    
                     return ""
                 elif state in ["active", "running", "pending", "in_progress"] or not stopped_at:
                     # Continue polling - task is still running
@@ -424,6 +478,10 @@ class RedditScraper:
         try:
             self.client.navigate(post_url, wait_time=3)
             
+            # Wait a bit more for comments to load
+            import time
+            time.sleep(2)
+            
             script = f"""
             (function() {{
                 const comments = [];
@@ -446,11 +504,16 @@ class RedditScraper:
             }})();
             """
             
-            result = self.client.execute_script(script)
-            comments = result if isinstance(result, list) else result.get("result", [])
-            return comments[:limit]
+            # execute_script now has retry logic for execution context errors
+            result = self.client.execute_script(script, retries=2)
+            comments = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
+            return comments[:limit] if comments else []
         except Exception as e:
-            print(f"⚠️ Error scraping comments: {e}")
+            error_msg = str(e)
+            if "Execution context was destroyed" in error_msg:
+                print(f"⚠️ Error scraping comments: Page navigated during execution. Skipping comments for this post.")
+            else:
+                print(f"⚠️ Error scraping comments: {e}")
             return []
     
     def take_screenshot(self, post: Post) -> str:
@@ -583,6 +646,16 @@ class RedditScraper:
             else:
                 print(f"  ✅ All agent tasks completed")
             
+        except KeyboardInterrupt:
+            print("\n\n⚠️ Interrupted by user. Cleaning up...")
+            # Don't re-raise immediately - try to clean up first
+            try:
+                if self.client.session_id:
+                    self.client.stop_session()
+                    print("✅ Browser session closed")
+            except Exception as e:
+                print(f"⚠️ Error closing session during interrupt: {e}")
+            raise  # Re-raise after cleanup attempt
         except Exception as e:
             print(f"❌ Error in scrape_all_subreddits: {e}")
             import traceback
@@ -594,8 +667,10 @@ class RedditScraper:
                     self.client.stop_session()
                     print("✅ Browser session closed")
             except KeyboardInterrupt:
-                # Re-raise keyboard interrupts
-                raise
+                # If we get another interrupt during cleanup, just exit
+                print("\n⚠️ Interrupted during cleanup. Exiting...")
+                import sys
+                sys.exit(0)
             except Exception as e:
                 print(f"⚠️ Error closing session: {e}")
                 # Don't raise - we want to exit cleanly even if cleanup fails

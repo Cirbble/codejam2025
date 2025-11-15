@@ -23,7 +23,7 @@ class AgentClient:
             "Content-Type": "application/json"
         }
     
-    def create_task(self, prompt: str, agent: str = "gemini", mode: str = "text", step_limit: int = 10) -> Dict[str, Any]:
+    def create_task(self, prompt: str, agent: str = "gemini", mode: str = "text", step_limit: int = 10, cdp_url: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Create an agent task.
         
         Args:
@@ -31,6 +31,8 @@ class AgentClient:
             agent: Agent to use (default: "gemini")
             mode: Task mode (default: "text")
             step_limit: Maximum steps for the agent
+            cdp_url: Optional CDP WebSocket URL to use existing browser session
+            session_id: Optional session ID to use existing browser session
             
         Returns:
             Task creation response with task_id
@@ -43,6 +45,12 @@ class AgentClient:
             "stepLimit": step_limit
         }
         
+        # If we have a CDP URL or session ID, pass it to use existing session
+        if cdp_url:
+            payload["cdpUrl"] = cdp_url
+        if session_id:
+            payload["sessionId"] = session_id
+        
         try:
             response = requests.post(url, headers=self.headers, json=payload, timeout=10)
             response.raise_for_status()
@@ -51,7 +59,11 @@ class AgentClient:
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Agent API request error: {e}")
             if hasattr(e, 'response') and e.response is not None:
+                print(f"   Status: {e.response.status_code}")
                 print(f"   Response: {e.response.text}")
+            raise
+        except Exception as e:
+            print(f"⚠️ Unexpected error creating agent task: {e}")
             raise
     
     def get_task(self, task_id: str) -> Dict[str, Any]:
@@ -67,11 +79,25 @@ class AgentClient:
         try:
             response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Log failure reasons for debugging
+            if result.get("state") == "failed":
+                failed_reason = result.get("failedReason", "Unknown")
+                error_msg = result.get("error", "")
+                print(f"     🔍 Task {task_id[:8]}... failed: {failed_reason}")
+                if error_msg:
+                    print(f"     🔍 Error: {error_msg}")
+            
+            return result
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Agent API get_task error: {e}")
             if hasattr(e, 'response') and e.response is not None:
+                print(f"   Status: {e.response.status_code}")
                 print(f"   Response: {e.response.text}")
+            raise
+        except Exception as e:
+            print(f"⚠️ Unexpected error getting task: {e}")
             raise
     
     def scrape_with_agent(self, url: str, extract_what: str = "all posts and their details") -> Dict[str, Any]:
@@ -143,6 +169,10 @@ class AgentClient:
                 # Task is complete if stoppedAt is set or state is completed/done
                 if stopped_at or state in ["completed", "done", "success", "finished"]:
                     final_result = result or task_status.get("output", "")
+                    
+                    # Log the raw agent output for debugging
+                    print(f"     🔍 Agent raw output for token ID: {str(final_result)[:200]}")
+                    
                     # Extract token name from result - clean it up
                     if final_result:
                         final_result = str(final_result).strip()
@@ -154,8 +184,11 @@ class AgentClient:
                         final_result = re.sub(r"['\"].*", "", final_result)
                         final_result = final_result.strip()
                         
+                        print(f"     🔍 After cleanup: {final_result[:100]}")
+                        
                         # Skip if it's clearly not a token name
                         if final_result.lower() in ["unknown", "none", "n/a", "i have", "i have a", "i have e"]:
+                            print(f"     ⚠️ Agent returned invalid response: {final_result}")
                             return None
                         
                         # Extract token name (uppercase letters, 2-10 chars, possibly with $)
@@ -165,25 +198,36 @@ class AgentClient:
                             token = token_matches[-1]
                             # Filter out common false positives
                             if token not in ["HAVE", "THE", "THIS", "THAT", "WITH", "FROM", "WHEN", "WHAT", "WHERE", "WHICH"]:
+                                print(f"     ✅ Extracted token: {token}")
                                 return token
+                            else:
+                                print(f"     ⚠️ Filtered out false positive: {token}")
                         
                         # If no token found but result looks like a token (all caps, short)
                         if re.match(r'^[A-Z]{2,10}$', final_result):
+                            print(f"     ✅ Result is token-like: {final_result}")
                             return final_result
                         
                         # Last resort: take first word if it's uppercase and looks like a token
                         first_word = final_result.split()[0] if final_result.split() else ""
                         if re.match(r'^[A-Z]{2,10}$', first_word):
+                            print(f"     ✅ Using first word as token: {first_word}")
                             return first_word
                         
+                        print(f"     ⚠️ Could not extract token from: {final_result[:100]}")
                         return None
+                    else:
+                        print(f"     ⚠️ Agent returned empty result")
                     return None
                 elif state in ["failed", "error"]:
+                    failed_reason = task_status.get("failedReason", "")
+                    print(f"     ❌ Token identification task failed: {failed_reason}")
                     return None
                 # Continue polling if still active/running
                 
                 time.sleep(2)
             
+            print(f"     ⏱️ Token identification timed out after 20 seconds")
             return None
         except Exception as e:
             print(f"⚠️ Agent error identifying token: {e}")

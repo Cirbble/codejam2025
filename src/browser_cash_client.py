@@ -258,18 +258,44 @@ class BrowserCashClient:
         self.page.goto(url, wait_until="domcontentloaded")
         time.sleep(wait_time)
     
-    def execute_script(self, script: str) -> Any:
+    def execute_script(self, script: str, retries: int = 2) -> Any:
         """Execute JavaScript in the browser session using Playwright.
         Automatically connects Playwright if not already connected.
         
         Args:
             script: JavaScript code to execute
+            retries: Number of retries if execution context is destroyed
             
         Returns:
             Result of script execution
         """
         self.ensure_playwright_connected()
-        return self.page.evaluate(script)
+        
+        for attempt in range(retries + 1):
+            try:
+                return self.page.evaluate(script)
+            except Exception as e:
+                error_msg = str(e)
+                # Check if it's an execution context error (page navigated during execution)
+                if "Execution context was destroyed" in error_msg or "Target closed" in error_msg:
+                    if attempt < retries:
+                        print(f"⚠️ Execution context destroyed (attempt {attempt + 1}/{retries + 1}), retrying...")
+                        # Wait a bit for page to stabilize
+                        import time
+                        time.sleep(1)
+                        # Re-ensure connection
+                        self.ensure_playwright_connected()
+                        continue
+                    else:
+                        print(f"⚠️ Execution context destroyed after {retries + 1} attempts - page may have navigated")
+                        raise
+                else:
+                    # Other errors, don't retry
+                    print(f"⚠️ Error executing script: {e}")
+                    raise
+        
+        # Should never reach here, but just in case
+        raise Exception("Failed to execute script after retries")
     
     def get_session(self) -> Dict[str, Any]:
         """Get current session information.
@@ -308,14 +334,24 @@ class BrowserCashClient:
                 self.page = None
         
         # Stop Playwright (can be slow, so wrap in try/except)
+        # Use a thread to avoid blocking on stop()
         if self.playwright:
-            try:
-                # Use a timeout or just catch exceptions
-                self.playwright.stop()
-            except Exception as e:
-                print(f"⚠️ Error stopping Playwright (may already be stopped): {e}")
-            finally:
-                self.playwright = None
+            import threading
+            def stop_playwright():
+                try:
+                    self.playwright.stop()
+                except Exception as e:
+                    print(f"⚠️ Error stopping Playwright (may already be stopped): {e}")
+            
+            # Try to stop in a non-blocking way
+            stop_thread = threading.Thread(target=stop_playwright, daemon=True)
+            stop_thread.start()
+            # Give it a short time to complete, but don't wait forever
+            stop_thread.join(timeout=2)
+            if stop_thread.is_alive():
+                print("⚠️ Playwright stop taking too long, continuing anyway...")
+            
+            self.playwright = None
         
         if not session_to_stop:
             print("⚠️ No active session to stop.")
