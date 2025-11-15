@@ -1,0 +1,57 @@
+{
+  "coins": [
+    {
+      "coinId": "dogecoin",
+      "name": "Dogecoin",
+      "symbol": "DOGE",
+      "price": 0.08,
+      "balance": 15000,
+      "changePercentage": 0.15,
+      "feedback": "Trending on Reddit",
+      "chartData": [0.075, 0.076, 0.078, 0.077, 0.079, 0.08, 0.081, 0.08],
+      "icon": "D",
+      "sentiment": {
+        "type": "positive",
+        "score": 0.75,
+        "sources": [
+          {
+            "platform": "reddit",
+            "url": "https://reddit.com/r/dogecoin/comments/xyz",
+            "text": "To the moon! 🚀",
+            "sentiment": 0.9
+          },
+          {
+            "platform": "twitter",
+            "url": "https://twitter.com/user/status/123",
+            "text": "Dogecoin looking bullish",
+            "sentiment": 0.8
+          }
+        ]
+      }
+    },
+    {
+      "coinId": "shiba",
+      "name": "Shiba Inu",
+      "symbol": "SHIB",
+      "price": 0.00001,
+      "balance": 50000000,
+      "changePercentage": -0.05,
+      "feedback": "Mixed signals",
+      "chartData": [0.000011, 0.00001, 0.000009, 0.000010, 0.00001],
+      "icon": "🐕",
+      "sentiment": {
+        "type": "neutral",
+        "score": 0.5,
+        "sources": [
+          {
+            "platform": "reddit",
+            "url": "https://reddit.com/r/shibarmy/comments/abc",
+            "text": "Holding strong",
+            "sentiment": 0.6
+          }
+        ]
+      }
+    }
+  ]
+}
+

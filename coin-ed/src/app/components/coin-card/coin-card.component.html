@@ -1,0 +1,41 @@
+<div class="coin-card">
+  <div class="coin-header">
+    <div class="coin-info">
+      <div class="coin-icon" [class]="'icon-' + coin.id">
+        {{ coin.icon || coin.symbol.charAt(0) }}
+      </div>
+      <div class="coin-details">
+        <h3>{{ coin.name }}</h3>
+        <p>{{ coin.symbol }}</p>
+      </div>
+    </div>
+    <button class="action-btn" [class.positive]="coin.changePercentage > 0">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M5 15L15 5M15 5H8M15 5V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="coin-balance">
+    <h2>${{ coin.balance.toLocaleString() }}</h2>
+  </div>
+
+  <div class="coin-footer">
+    <span class="feedback">{{ coin.feedback }}</span>
+    <span class="change" [class.positive]="coin.changePercentage > 0" [class.negative]="coin.changePercentage < 0">
+      {{ coin.changePercentage > 0 ? '+' : '' }}{{ (coin.changePercentage * 100).toFixed(2) }}%
+    </span>
+  </div>
+
+  <div class="mini-chart">
+    <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+      <polyline
+        [attr.points]="generateChartPoints()"
+        fill="none"
+        [attr.stroke]="coin.changePercentage > 0 ? '#FFD700' : '#888'"
+        stroke-width="2"
+      />
+    </svg>
+  </div>
+</div>
+

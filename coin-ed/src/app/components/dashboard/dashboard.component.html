@@ -1,0 +1,46 @@
+<div class="dashboard">
+  <header class="dashboard-header">
+    <div class="header-content">
+      <h1 class="logo">Coin'ed</h1>
+      <p class="subtitle">AI-Powered Crypto Sentiment Analysis</p>
+    </div>
+  </header>
+
+  <div class="dashboard-content">
+    <!-- Control Panel -->
+    <app-control-panel></app-control-panel>
+
+    <!-- Demo Data Loader -->
+    <div class="demo-loader">
+      <button class="load-data-btn" (click)="loadExampleData()">
+        📊 Load Example Scraped Data
+      </button>
+      <p class="demo-note">Click to simulate loading data from scrapers</p>
+    </div>
+
+    <!-- Total Balance Section -->
+    <section class="balance-section">
+      <p class="balance-label">TOTAL BALANCE</p>
+      <h1 class="total-balance">${{ dataService.portfolio().totalBalance.toLocaleString() }}<span class="cents">.00</span></h1>
+    </section>
+
+    <!-- Coin Cards Grid -->
+    <section class="coins-grid">
+      @for (coin of dataService.coins(); track coin.id) {
+        <app-coin-card [coin]="coin"></app-coin-card>
+      }
+      @empty {
+        <div class="empty-state">
+          <p>No coins to display. Start the scraper to analyze cryptocurrencies!</p>
+        </div>
+      }
+    </section>
+
+    <!-- Bottom Grid: Portfolio + Chart -->
+    <section class="bottom-grid">
+      <app-portfolio></app-portfolio>
+      <app-chart></app-chart>
+    </section>
+  </div>
+</div>
+
