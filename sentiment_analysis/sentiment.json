@@ -26,8 +26,11 @@
     "link": "https://www.reddit.com/r/SatoshiStreetBets/comments/1opa768/rare_chance_to_buy_hege_at_its_launch_night_price/",
     "post_type": "image",
     "screenshot_path": null,
-    "sentiment_score": 0.089,
+    "sentiment_score": null,
     "hype_score": null,
     "keywords_found": [],
-    "token_name": null
+    "token_name": null,
+    "raw_sentiment_score": 0.125,
+    "aggregate_sentiment_score": 0.149,
+    "engagement_score": 0.181
 }
