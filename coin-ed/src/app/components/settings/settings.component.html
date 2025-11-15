@@ -37,52 +37,54 @@
           >
         </div>
 
-        <!-- Card Number -->
-        <div class="form-group">
-          <label class="form-label">Card number:</label>
-          <input 
-            type="text" 
-            formControlName="cardNumber"
-            class="form-input"
-            placeholder="1234 5678 9012 3456"
-            maxlength="16"
-          >
-        </div>
+        @if (!isLoginMode()) {
+          <!-- Card Number -->
+          <div class="form-group">
+            <label class="form-label">Card number:</label>
+            <input 
+              type="text" 
+              formControlName="cardNumber"
+              class="form-input"
+              placeholder="1234 5678 9012 3456"
+              maxlength="16"
+            >
+          </div>
 
-        <!-- Date of Expiration -->
-        <div class="form-group">
-          <label class="form-label">Date of expiration:</label>
-          <input 
-            type="text" 
-            formControlName="expirationDate"
-            class="form-input"
-            placeholder="MM/YY"
-            maxlength="5"
-          >
-        </div>
+          <!-- Date of Expiration -->
+          <div class="form-group">
+            <label class="form-label">Date of expiration:</label>
+            <input 
+              type="text" 
+              formControlName="expirationDate"
+              class="form-input"
+              placeholder="MM/YY"
+              maxlength="5"
+            >
+          </div>
 
-        <!-- Name of Holder -->
-        <div class="form-group">
-          <label class="form-label">Name of holder:</label>
-          <input 
-            type="text" 
-            formControlName="cardHolder"
-            class="form-input"
-            placeholder="John Doe"
-          >
-        </div>
+          <!-- Name of Holder -->
+          <div class="form-group">
+            <label class="form-label">Name of holder:</label>
+            <input 
+              type="text" 
+              formControlName="cardHolder"
+              class="form-input"
+              placeholder="John Doe"
+            >
+          </div>
 
-        <!-- CVV -->
-        <div class="form-group cvv-group">
-          <label class="form-label">CVV:</label>
-          <input 
-            type="text" 
-            formControlName="cvv"
-            class="form-input cvv-input"
-            placeholder="123"
-            maxlength="4"
-          >
-        </div>
+          <!-- CVV -->
+          <div class="form-group cvv-group">
+            <label class="form-label">CVV:</label>
+            <input 
+              type="text" 
+              formControlName="cvv"
+              class="form-input cvv-input"
+              placeholder="123"
+              maxlength="4"
+            >
+          </div>
+        }
       </form>
 
       <!-- Sign In Button at Bottom -->
