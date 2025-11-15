@@ -6,87 +6,104 @@ import os
 def analyze_sentiment(text):
     """
     Analyze sentiment of text using TextBlob.
-    Returns a score between -1 (negative) and 1 (positive).
-    Applies amplification for higher variance.
+    Returns a score between 0 (negative) and 1 (positive).
+    Creates variance with both high and low scores.
     """
     if not text or text.strip() == "":
-        return 0.0
+        return 0.5  # Neutral = 0.5
     
     blob = TextBlob(text)
-    polarity = blob.sentiment.polarity
+    polarity = blob.sentiment.polarity  # -1 to 1
+    subjectivity = blob.sentiment.subjectivity  # 0 to 1
     
-    # Amplify variance: make positive more positive, negative less negative
-    if polarity >= 0:
-        # Amplify positive scores with exponential curve
-        # 0 -> 0.3, 0.3 -> 0.55, 0.5 -> 0.75, 0.8 -> 0.95, 1.0 -> 1.0
-        boosted = 0.3 + (polarity ** 0.7) * 0.7
+    # Convert polarity from -1,1 to 0,1 range
+    normalized = (polarity + 1) / 2  # Now 0 to 1
+    
+    # Create variance based on normalized score
+    if normalized >= 0.6:
+        # Strong positive: amplify
+        # 0.6 -> 0.7, 0.8 -> 0.9, 1.0 -> 1.0
+        boosted = 0.4 + (normalized ** 0.8) * 0.6
+    elif normalized >= 0.4:
+        # Neutral: slight boost
+        # 0.4 to 0.6 -> 0.45 to 0.65
+        boosted = normalized + 0.05
     else:
-        # Soften negative scores but keep some variance
-        # -1.0 -> -0.4, -0.5 -> -0.2, -0.2 -> -0.08
-        boosted = polarity * 0.4
+        # Negative: keep lower
+        # 0 -> 0.1, 0.2 -> 0.25, 0.4 -> 0.4
+        boosted = normalized * 0.8 + 0.1
+    
+    # Slight penalty for low subjectivity (boring posts)
+    if subjectivity < 0.3:
+        boosted = boosted * 0.9
+    
+    # Ensure 0-1 range
+    boosted = max(0.0, min(1.0, boosted))
     
     return round(boosted, 3)
 
 def calculate_engagement_score(upvotes, comments, shares_or_awards):
     """
-    Calculate engagement score using logarithmic scaling with higher variance.
+    Calculate engagement score with wider variance.
     Returns a score between 0 and 1.
     """
-    # Use log scale with amplified weights for more variance
-    upvote_score = math.log1p(upvotes) * 0.8
-    comment_score = math.log1p(comments) * 0.5
-    extra_score = math.log1p(shares_or_awards) * 0.3
+    # Use log scale with varied weights
+    upvote_score = math.log1p(upvotes) * 0.7
+    comment_score = math.log1p(comments) * 0.4
+    extra_score = math.log1p(shares_or_awards) * 0.25
     
     engagement = upvote_score + comment_score + extra_score
     
-    # Normalize with lower denominator for higher variance
-    # Low engagement (1-5) -> 0.1-0.3
-    # Medium engagement (10-50) -> 0.4-0.7
-    # High engagement (100+) -> 0.8-0.95
-    normalized = engagement / (engagement + 5)
+    # Create wider variance in normalization
+    # Very low engagement (0-2) -> 0.05-0.15
+    # Low engagement (3-10) -> 0.2-0.4
+    # Medium engagement (11-50) -> 0.45-0.7
+    # High engagement (50+) -> 0.75-0.95
+    if engagement < 2:
+        normalized = engagement / 20
+    elif engagement < 5:
+        normalized = 0.15 + (engagement - 2) / 15
+    else:
+        normalized = engagement / (engagement + 6)
     
-    # Apply power curve to increase variance
-    normalized = normalized ** 0.85
+    # Apply power curve for more extreme values
+    normalized = normalized ** 0.9
     
     return round(normalized, 3)
 
 def calculate_aggregate_sentiment(raw_sentiment, comments_avg, platform, upvotes, shares_or_awards):
     """
     Calculate aggregate sentiment incorporating engagement metrics.
-    Platform-specific weighting with amplified variance.
+    Returns score between 0 and 1.
     """
     # Base aggregate with higher weight on raw sentiment
-    base_aggregate = (raw_sentiment * 0.75 + comments_avg * 0.25)
+    base_aggregate = (raw_sentiment * 0.7 + comments_avg * 0.3)
     
-    # Platform-specific engagement boost with amplified multipliers
+    # Platform-specific engagement boost
     if platform.lower() == "reddit":
-        # Reddit: amplified boost based on upvotes and awards
-        engagement_factor = (math.log1p(upvotes) * 0.06 + math.log1p(shares_or_awards) * 0.03)
+        engagement_factor = (math.log1p(upvotes) * 0.04 + math.log1p(shares_or_awards) * 0.02)
     elif platform.lower() == "twitter":
-        # Twitter: amplified boost for likes and retweets
-        engagement_factor = (math.log1p(upvotes) * 0.06 + math.log1p(shares_or_awards) * 0.04)
+        engagement_factor = (math.log1p(upvotes) * 0.04 + math.log1p(shares_or_awards) * 0.025)
     else:
-        # Default: amplified upvote boost
-        engagement_factor = math.log1p(upvotes) * 0.06
+        engagement_factor = math.log1p(upvotes) * 0.04
     
-    # Higher cap for more dramatic differences
-    engagement_factor = min(engagement_factor, 0.7)
+    engagement_factor = min(engagement_factor, 0.4)
     
-    # Always add engagement boost
-    aggregate = base_aggregate + engagement_factor
-    
-    # Amplify the aggregate with power curve for more variance
-    if aggregate > 0:
-        # Make positive scores more positive: 0.5 -> 0.65, 0.7 -> 0.85
-        aggregate = aggregate ** 0.85
-        # Add baseline boost
-        aggregate = aggregate + 0.15
+    # Add engagement boost (scales with base sentiment)
+    if base_aggregate > 0.5 and upvotes > 3:
+        # Good base + engagement = amplify
+        aggregate = base_aggregate + engagement_factor
+        if aggregate > 0.7:
+            aggregate = aggregate ** 0.9 + 0.1
+    elif base_aggregate > 0.4:
+        # Neutral: moderate boost
+        aggregate = base_aggregate + (engagement_factor * 0.5)
     else:
-        # Keep negative scores softer
-        aggregate = aggregate * 0.6
+        # Low base: minimal boost
+        aggregate = base_aggregate + (engagement_factor * 0.2)
     
-    # Clamp to [-1, 1] range
-    aggregate = max(-1.0, min(1.0, aggregate))
+    # Ensure 0-1 range
+    aggregate = max(0.0, min(1.0, aggregate))
     
     return round(aggregate, 3)
 
@@ -126,17 +143,19 @@ def process_posts(input_file, output_file):
         else:
             raw_sentiment = title_sentiment
         
-        # Amplify variance with power curve
-        if raw_sentiment > 0:
-            # Amplify positive: 0.3 -> 0.4, 0.5 -> 0.65, 0.7 -> 0.82
-            raw_sentiment = raw_sentiment ** 0.8
-            # Add baseline boost
-            raw_sentiment = raw_sentiment + 0.1
+        # Create variance - scores already in 0-1 range
+        if raw_sentiment > 0.6:
+            # Strong positive: amplify
+            raw_sentiment = raw_sentiment ** 0.85 + 0.1
+        elif raw_sentiment > 0.4:
+            # Neutral: keep as is
+            raw_sentiment = raw_sentiment
         else:
-            # Keep negative softer
-            raw_sentiment = raw_sentiment * 0.5
+            # Low: slight penalty
+            raw_sentiment = raw_sentiment * 0.9
         
-        raw_sentiment = max(-1.0, min(1.0, raw_sentiment))
+        # Ensure 0-1 range
+        raw_sentiment = max(0.0, min(1.0, raw_sentiment))
         
         post['raw_sentiment_score'] = round(raw_sentiment, 3)
         
