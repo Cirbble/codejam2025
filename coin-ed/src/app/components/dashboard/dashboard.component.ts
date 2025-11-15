@@ -78,6 +78,29 @@ export class DashboardComponent {
     return this.recentlyUpdatedCoins.has(coinId);
   }
 
+  /**
+   * Calculate overall confidence score from sentiment metrics
+   * Returns a percentage (0-100)
+   */
+  getConfidenceScore(coin: any): number {
+    // Combine hype (raw sentiment), communityHype (aggregate), and popularity (engagement)
+    // Weight: 30% raw sentiment, 50% aggregate sentiment, 20% engagement
+    const hype = coin.hype || 0;
+    const communityHype = coin.communityHype || 0;
+    const popularity = coin.popularity || 0;
+    
+    // Convert from -1 to 1 scale to 0 to 1 scale
+    const normalizedHype = (hype + 1) / 2;
+    const normalizedCommunity = (communityHype + 1) / 2;
+    const normalizedPopularity = popularity; // Already 0-1
+    
+    // Calculate weighted average
+    const confidence = (normalizedHype * 0.3) + (normalizedCommunity * 0.5) + (normalizedPopularity * 0.2);
+    
+    // Convert to percentage
+    return Math.round(confidence * 100);
+  }
+
   openSettings(): void {
     this.router.navigate(['/settings']);
   }

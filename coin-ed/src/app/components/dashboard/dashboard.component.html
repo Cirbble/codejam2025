@@ -46,8 +46,8 @@
               <span class="coin-list-name">{{ coin.name }}</span>
               <span class="coin-list-symbol">{{ coin.symbol }}</span>
             </div>
-            <div class="coin-list-change" [class.positive]="coin.changePercentage > 0" [class.negative]="coin.changePercentage < 0">
-              {{ coin.changePercentage > 0 ? '+' : '' }}{{ (coin.changePercentage * 100).toFixed(1) }}%
+            <div class="coin-list-change" [class.positive]="getConfidenceScore(coin) >= 50" [class.negative]="getConfidenceScore(coin) < 50">
+              {{ getConfidenceScore(coin) }}%
             </div>
             @if (isRecentlyUpdated(coin.id)) {
               <span class="new-badge">NEW</span>

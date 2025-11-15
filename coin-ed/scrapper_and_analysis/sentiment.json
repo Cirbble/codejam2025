@@ -22,9 +22,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "RAWW",
-    "raw_sentiment_score": 0.252,
-    "aggregate_sentiment_score": 0.266,
-    "engagement_score": 0.144
+    "raw_sentiment_score": 0.523,
+    "aggregate_sentiment_score": 0.852,
+    "engagement_score": 0.412
   },
   {
     "id": 2,
@@ -46,9 +46,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "TRX",
-    "raw_sentiment_score": -0.096,
-    "aggregate_sentiment_score": 0.042,
-    "engagement_score": 0.053
+    "raw_sentiment_score": 0.36,
+    "aggregate_sentiment_score": 0.633,
+    "engagement_score": 0.202
   },
   {
     "id": 3,
@@ -70,9 +70,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "BIOK",
-    "raw_sentiment_score": 0.102,
-    "aggregate_sentiment_score": 0.107,
-    "engagement_score": 0.02
+    "raw_sentiment_score": 0.613,
+    "aggregate_sentiment_score": 0.772,
+    "engagement_score": 0.098
   },
   {
     "id": 4,
@@ -94,9 +94,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "OBEY",
-    "raw_sentiment_score": -0.016,
-    "aggregate_sentiment_score": 0.074,
-    "engagement_score": 0.053
+    "raw_sentiment_score": 0.31,
+    "aggregate_sentiment_score": 0.596,
+    "engagement_score": 0.202
   },
   {
     "id": 5,
@@ -127,9 +127,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "KENDU",
-    "raw_sentiment_score": -0.086,
-    "aggregate_sentiment_score": 0.122,
-    "engagement_score": 0.202
+    "raw_sentiment_score": 0.345,
+    "aggregate_sentiment_score": 0.781,
+    "engagement_score": 0.507
   },
   {
     "id": 7,
@@ -152,9 +152,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "MEWC",
-    "raw_sentiment_score": 0.062,
-    "aggregate_sentiment_score": 0.315,
-    "engagement_score": 0.102
+    "raw_sentiment_score": 0.446,
+    "aggregate_sentiment_score": 0.794,
+    "engagement_score": 0.327
   },
   {
     "id": 10,
@@ -182,9 +182,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "BIOK",
-    "raw_sentiment_score": 0.201,
-    "aggregate_sentiment_score": 0.234,
-    "engagement_score": 0.237
+    "raw_sentiment_score": 0.689,
+    "aggregate_sentiment_score": 1.0,
+    "engagement_score": 0.556
   },
   {
     "id": 11,
@@ -206,9 +206,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "BTC",
-    "raw_sentiment_score": 0.05,
-    "aggregate_sentiment_score": 0.087,
-    "engagement_score": 0.02
+    "raw_sentiment_score": 0.563,
+    "aggregate_sentiment_score": 0.737,
+    "engagement_score": 0.098
   },
   {
     "id": 13,
@@ -235,9 +235,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "RAWW",
-    "raw_sentiment_score": 0.084,
-    "aggregate_sentiment_score": 0.105,
-    "engagement_score": 0.165
+    "raw_sentiment_score": 0.599,
+    "aggregate_sentiment_score": 0.889,
+    "engagement_score": 0.449
   },
   {
     "id": 14,
@@ -268,9 +268,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "PEP",
-    "raw_sentiment_score": 0.223,
-    "aggregate_sentiment_score": 0.208,
-    "engagement_score": 0.221
+    "raw_sentiment_score": 0.684,
+    "aggregate_sentiment_score": 1.0,
+    "engagement_score": 0.535
   },
   {
     "id": 15,
@@ -292,9 +292,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "KTA",
-    "raw_sentiment_score": 0.243,
-    "aggregate_sentiment_score": 0.186,
-    "engagement_score": 0.07
+    "raw_sentiment_score": 0.689,
+    "aggregate_sentiment_score": 0.884,
+    "engagement_score": 0.251
   },
   {
     "id": 16,
@@ -316,9 +316,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "KOGE",
-    "raw_sentiment_score": 0.014,
-    "aggregate_sentiment_score": 0.094,
-    "engagement_score": 0.07
+    "raw_sentiment_score": 0.516,
+    "aggregate_sentiment_score": 0.766,
+    "engagement_score": 0.251
   },
   {
     "id": 17,
@@ -340,9 +340,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "TAP",
-    "raw_sentiment_score": 0.133,
-    "aggregate_sentiment_score": 0.134,
-    "engagement_score": 0.053
+    "raw_sentiment_score": 0.64,
+    "aggregate_sentiment_score": 0.829,
+    "engagement_score": 0.202
   },
   {
     "id": 18,
@@ -365,9 +365,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "OBEY",
-    "raw_sentiment_score": 0.075,
-    "aggregate_sentiment_score": 0.096,
-    "engagement_score": 0.102
+    "raw_sentiment_score": 0.589,
+    "aggregate_sentiment_score": 0.827,
+    "engagement_score": 0.327
   },
   {
     "id": 19,
@@ -389,9 +389,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "SWELL",
-    "raw_sentiment_score": 0.056,
-    "aggregate_sentiment_score": 0.103,
-    "engagement_score": 0.053
+    "raw_sentiment_score": 0.569,
+    "aggregate_sentiment_score": 0.78,
+    "engagement_score": 0.202
   },
   {
     "id": 20,
@@ -414,9 +414,9 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "GRASS",
-    "raw_sentiment_score": 0.055,
-    "aggregate_sentiment_score": 0.074,
-    "engagement_score": 0.081
+    "raw_sentiment_score": 0.568,
+    "aggregate_sentiment_score": 0.75,
+    "engagement_score": 0.278
   },
   {
     "id": 22,
@@ -438,8 +438,8 @@
     "sentiment_score": null,
     "hype_score": null,
     "token_name": "PAWS",
-    "raw_sentiment_score": 0.596,
-    "aggregate_sentiment_score": 0.43,
-    "engagement_score": 0.249
+    "raw_sentiment_score": 0.892,
+    "aggregate_sentiment_score": 1.0,
+    "engagement_score": 0.57
   }
 ]
