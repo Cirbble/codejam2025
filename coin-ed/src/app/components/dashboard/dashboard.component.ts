@@ -124,5 +124,21 @@ export class DashboardComponent {
   goToHomepage(): void {
     this.selectedCoinId = null;
   }
+
+  /**
+   * Get recommendation (BUY/HOLD/SELL) based on confidence score
+   */
+  getRecommendation(coin: any): string {
+    // If coin already has recommendation from backend, use it
+    if (coin.recommendation) {
+      return coin.recommendation;
+    }
+    
+    // Otherwise calculate it
+    const confidence = this.getConfidenceScore(coin);
+    if (confidence >= 75) return 'BUY';
+    if (confidence >= 55) return 'HOLD';
+    return 'SELL';
+  }
 }
 

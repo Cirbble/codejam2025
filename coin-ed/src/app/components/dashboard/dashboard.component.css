@@ -177,12 +177,10 @@
 .coin-list-icon {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: bold;
   flex-shrink: 0;
 }
@@ -209,22 +207,23 @@
   margin-top: 2px;
 }
 
-.coin-list-change {
+.coin-list-recommendation {
   font-size: 12px;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-weight: 700;
   flex-shrink: 0;
+  letter-spacing: 0.5px;
 }
 
-.coin-list-change.positive {
+.coin-list-recommendation.buy {
   color: #00d4aa;
-  background: rgba(0, 212, 170, 0.1);
 }
 
-.coin-list-change.negative {
+.coin-list-recommendation.hold {
+  color: #fbbf24;
+}
+
+.coin-list-recommendation.sell {
   color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.1);
 }
 
 .new-badge {

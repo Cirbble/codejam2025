@@ -67,6 +67,23 @@ def convert_sentiment_to_coin_data(input_file, output_file):
         total_upvotes = sum(p.get('upvotes_likes', 0) for p in posts)
         total_comments = len(unique_comments)
         
+        # Calculate overall confidence score (0-100%)
+        # Weight: 30% raw sentiment, 50% aggregate sentiment, 20% engagement
+        normalized_raw = (avg_raw_sentiment + 1) / 2  # Convert from -1 to 1 scale to 0 to 1
+        normalized_aggregate = (avg_aggregate_sentiment + 1) / 2
+        normalized_engagement = avg_engagement  # Already 0-1
+        
+        confidence = (normalized_raw * 0.3) + (normalized_aggregate * 0.5) + (normalized_engagement * 0.2)
+        confidence_percentage = round(confidence * 100)
+        
+        # Determine recommendation based on confidence
+        if confidence_percentage >= 75:
+            recommendation = "BUY"
+        elif confidence_percentage >= 55:
+            recommendation = "HOLD"
+        else:
+            recommendation = "SELL"
+        
         # Create combined coin entry
         coin_entry = {
             "id": token_name.lower(),
@@ -91,7 +108,9 @@ def convert_sentiment_to_coin_data(input_file, output_file):
             "comment_count": total_comments,
             "comments": unique_comments,  # All unique comments combined
             "link": latest_post.get('link', ''),
-            "post_count": len(posts)  # Track how many posts were combined
+            "post_count": len(posts),  # Track how many posts were combined
+            "confidence": confidence_percentage,
+            "recommendation": recommendation
         }
         
         coin_data.append(coin_entry)
@@ -109,7 +128,13 @@ def convert_sentiment_to_coin_data(input_file, output_file):
     print(f"Posts combined: {len(sentiment_data) - len(coin_data)}")
     print(f"\nTop 5 coins by sentiment:")
     for i, coin in enumerate(coin_data[:5], 1):
-        print(f"{i}. {coin['name']}: {coin['aggregate_sentiment_score']} ({coin['post_count']} posts, {coin['comment_count']} comments)")
+        print(f"{i}. {coin['name']}: {coin['aggregate_sentiment_score']} | Confidence: {coin['confidence']}% | {coin['recommendation']} ({coin['post_count']} posts, {coin['comment_count']} comments)")
+    
+    # Show recommendation breakdown
+    buy_count = sum(1 for c in coin_data if c['recommendation'] == 'BUY')
+    hold_count = sum(1 for c in coin_data if c['recommendation'] == 'HOLD')
+    sell_count = sum(1 for c in coin_data if c['recommendation'] == 'SELL')
+    print(f"\nRecommendations: {buy_count} BUY | {hold_count} HOLD | {sell_count} SELL")
     print(f"\nOutput saved to: {output_path}")
 
 if __name__ == "__main__":

@@ -46,8 +46,11 @@
               <span class="coin-list-name">{{ coin.name }}</span>
               <span class="coin-list-symbol">{{ coin.symbol }}</span>
             </div>
-            <div class="coin-list-change" [class.positive]="getConfidenceScore(coin) >= 50" [class.negative]="getConfidenceScore(coin) < 50">
-              {{ getConfidenceScore(coin) }}%
+            <div class="coin-list-recommendation" 
+                 [class.buy]="getRecommendation(coin) === 'BUY'" 
+                 [class.hold]="getRecommendation(coin) === 'HOLD'" 
+                 [class.sell]="getRecommendation(coin) === 'SELL'">
+              {{ getRecommendation(coin) }}
             </div>
             @if (isRecentlyUpdated(coin.id)) {
               <span class="new-badge">NEW</span>
