@@ -1,0 +1,50 @@
+.gauge-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.gauge {
+  position: relative;
+  width: 100%;
+  max-width: 120px;
+}
+
+.gauge-svg {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0 8px rgba(107, 138, 255, 0.3));
+}
+
+.gauge-progress {
+  transition: stroke-dashoffset 0.8s ease;
+}
+
+.gauge-needle {
+  transition: all 0.8s ease;
+}
+
+g {
+  transition: transform 0.8s ease;
+}
+
+.gauge-value {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.gauge-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}

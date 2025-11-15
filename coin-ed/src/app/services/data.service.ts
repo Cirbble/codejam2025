@@ -52,7 +52,10 @@ export class DataService {
         price: item.price || coins[existingCoinIndex].price,
         changePercentage: item.changePercentage || coins[existingCoinIndex].changePercentage,
         feedback: item.feedback || coins[existingCoinIndex].feedback,
-        chartData: item.chartData || coins[existingCoinIndex].chartData
+        chartData: item.chartData || coins[existingCoinIndex].chartData,
+        hype: item.raw_sentiment_score !== undefined ? item.raw_sentiment_score : coins[existingCoinIndex].hype,
+        communityHype: item.aggregate_sentiment_score !== undefined ? item.aggregate_sentiment_score : coins[existingCoinIndex].communityHype,
+        popularity: item.engagement_score !== undefined ? item.engagement_score : coins[existingCoinIndex].popularity
       };
       this.coins.set(coins);
     } else {
@@ -66,7 +69,10 @@ export class DataService {
         feedback: item.feedback || '',
         changePercentage: item.changePercentage || 0,
         chartData: item.chartData || [],
-        icon: item.icon || ''
+        icon: item.icon || '',
+        hype: item.raw_sentiment_score,
+        communityHype: item.aggregate_sentiment_score,
+        popularity: item.engagement_score
       };
       this.coins.set([...this.coins(), newCoin]);
     }
@@ -152,7 +158,10 @@ export class DataService {
         feedback: 'Feedback',
         changePercentage: 0.25,
         chartData: this.generateMockChartData(),
-        icon: '₿'
+        icon: '₿',
+        hype: 0.75,
+        communityHype: 0.82,
+        popularity: 0.68
       },
       {
         id: 'litecoin',
@@ -163,7 +172,10 @@ export class DataService {
         feedback: 'Feedback',
         changePercentage: 0.15,
         chartData: this.generateMockChartData(),
-        icon: 'Ł'
+        icon: 'Ł',
+        hype: 0.45,
+        communityHype: 0.52,
+        popularity: 0.38
       },
       {
         id: 'ethereum',
@@ -174,7 +186,10 @@ export class DataService {
         feedback: 'Feedback',
         changePercentage: 0.25,
         chartData: this.generateMockChartData(),
-        icon: 'Ξ'
+        icon: 'Ξ',
+        hype: 0.88,
+        communityHype: 0.91,
+        popularity: 0.85
       },
       {
         id: 'solana',
@@ -185,7 +200,10 @@ export class DataService {
         feedback: 'Feedback',
         changePercentage: -0.25,
         chartData: this.generateMockChartData(),
-        icon: '◎'
+        icon: '◎',
+        hype: 0.32,
+        communityHype: 0.28,
+        popularity: 0.41
       }
     ];
 
