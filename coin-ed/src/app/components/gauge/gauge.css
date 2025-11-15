@@ -29,17 +29,6 @@ g {
   transition: transform 0.8s ease;
 }
 
-.gauge-value {
-  position: absolute;
-  bottom: 5px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
 .gauge-label {
   font-size: 12px;
   font-weight: 600;
@@ -47,4 +36,12 @@ g {
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.gauge-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
 }
