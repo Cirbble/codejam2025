@@ -1,0 +1,670 @@
+"""Reddit scraper for memecoin sentiment analysis using Browser Cash."""
+import time
+import json
+import os
+import threading
+import re
+from typing import List, Dict, Any
+from src.browser_cash_client import BrowserCashClient
+from src.config import MEMECOIN_SUBREDDITS
+from src.models import Post
+from src.agent_client import AgentClient
+
+
+class RedditScraper:
+    """Scraper for Reddit subreddits using Browser Cash automation."""
+    
+    def __init__(self, screenshot_dir: str = "screenshots"):
+        """Initialize the Reddit scraper.
+        
+        Args:
+            screenshot_dir: Directory to save screenshots
+        """
+        self.client = BrowserCashClient()
+        self.agent_client = AgentClient()
+        self.subreddits = MEMECOIN_SUBREDDITS
+        self.screenshot_dir = screenshot_dir
+        self.post_id_counter = 1
+        
+        # Store posts by ID for async updates
+        self.posts_dict: Dict[int, Post] = {}
+        self.pending_agents: Dict[int, Dict] = {}  # post_id -> {task_id, type, post}
+        self.lock = threading.Lock()  # For thread-safe updates
+        
+        # Create screenshot directory if it doesn't exist
+        os.makedirs(screenshot_dir, exist_ok=True)
+    
+    def navigate_to_subreddit(self, subreddit: str) -> Dict[str, Any]:
+        """Navigate to a specific Reddit subreddit.
+        
+        Args:
+            subreddit: Name of the subreddit (without r/)
+            
+        Returns:
+            Navigation result
+        """
+        url = f"https://www.reddit.com/r/{subreddit}/"
+        return self.client.navigate(url, wait_time=5)
+    
+    def scrape_posts(self, subreddit: str, limit: int = 25) -> List[Post]:
+        """Scrape posts from the current Reddit page with full details.
+        
+        Args:
+            subreddit: Name of the subreddit
+            limit: Maximum number of posts to scrape
+            
+        Returns:
+            List of Post objects
+        """
+        script = f"""
+        (function() {{
+            const posts = [];
+            const postElements = document.querySelectorAll('shreddit-post');
+            
+            console.log('Found ' + postElements.length + ' shreddit-post elements');
+            
+            for (let i = 0; i < Math.min({limit}, postElements.length); i++) {{
+                const post = postElements[i];
+                
+                // Get data from attributes (most reliable)
+                const title = post.getAttribute('post-title') || '';
+                const score = post.getAttribute('score') || '0';
+                const commentCount = post.getAttribute('comment-count') || '0';
+                const timestamp = post.getAttribute('created-timestamp') || '';
+                const author = post.getAttribute('author') || '';
+                const permalink = post.getAttribute('permalink') || '';
+                const postType = post.getAttribute('post-type') || 'text';
+                
+                // Build full URL
+                let postUrl = '';
+                if (permalink) {{
+                    postUrl = permalink.startsWith('http') ? permalink : 'https://www.reddit.com' + permalink;
+                }}
+                
+                // Get title from slot if attribute missing
+                let titleText = title;
+                if (!titleText) {{
+                    const titleSlot = post.querySelector('a[slot="title"]');
+                    titleText = titleSlot ? titleSlot.textContent.trim() : '';
+                }}
+                
+                // Get post content from text-body slot
+                let content = '';
+                const textBody = post.querySelector('shreddit-post-text-body');
+                if (textBody) {{
+                    const contentDiv = textBody.querySelector('.md, [class*="feed-card-text-preview"], p');
+                    if (contentDiv) {{
+                        content = contentDiv.textContent.trim();
+                    }}
+                }}
+                
+                // Get post age from faceplate-timeago
+                let postAge = '';
+                const timeAgo = post.querySelector('faceplate-timeago time');
+                if (timeAgo) {{
+                    postAge = timeAgo.textContent.trim();
+                }}
+                
+                if (titleText && titleText.length > 3) {{
+                    posts.push({{
+                        title: titleText,
+                        content: content,
+                        score: score,
+                        comments: commentCount,
+                        timestamp: timestamp,
+                        postAge: postAge,
+                        author: author ? 'u/' + author : '',
+                        url: postUrl,
+                        postType: postType
+                    }});
+                }}
+            }}
+            
+            return posts;
+        }})();
+        """
+        
+        try:
+            result = self.client.execute_script(script)
+            raw_posts = result if isinstance(result, list) else result.get("result", [])
+            
+            # Convert to Post objects
+            posts = []
+            for raw_post in raw_posts:
+                # Parse score (handle "1.2k" format)
+                score_text = str(raw_post.get("score", "0"))
+                upvotes = self._parse_number(score_text)
+                
+                # Parse comments
+                comments_text = str(raw_post.get("comments", "0"))
+                comment_count = self._parse_number(comments_text)
+                
+                post = Post(
+                    id=self.post_id_counter,
+                    source=f"r/{subreddit}",
+                    platform="reddit",
+                    title=raw_post.get("title"),
+                    content=raw_post.get("content"),
+                    author=raw_post.get("author"),
+                    timestamp=raw_post.get("timestamp"),
+                    post_age=raw_post.get("postAge"),
+                    upvotes_likes=upvotes,
+                    comment_count=comment_count,
+                    link=raw_post.get("url"),
+                    post_type=raw_post.get("postType", "text"),
+                )
+                
+                # Store post in dict for async updates
+                self.posts_dict[post.id] = post
+                posts.append(post)
+                
+                # Start agent tasks in background (non-blocking)
+                if not post.content and post.post_type == "image" and post.link:
+                    print(f"  🤖 Starting image description for post {post.id} (background)...")
+                    self._start_image_description_async(post)
+                
+                # Start token identification in background (non-blocking)
+                if (post.title or post.content) and not post.token_name:
+                    print(f"  🤖 Starting token identification for post {post.id} (background)...")
+                    self._start_token_identification_async(post)
+                
+                self.post_id_counter += 1
+            
+            print(f"📊 Scraped {len(posts)} posts")
+            return posts
+        except Exception as e:
+            print(f"❌ Error scraping posts: {e}")
+            return []
+    
+    def _start_image_description_async(self, post: Post) -> None:
+        """Start image description agent task in background."""
+        def run_agent():
+            try:
+                image_description = self._extract_text_from_image(post.link)
+                with self.lock:
+                    if image_description:
+                        post.content = image_description
+                        print(f"  ✅ Image described for post {post.id}: {image_description[:80]}...")
+                        # Update JSON file
+                        self._update_post_in_json(post)
+                    else:
+                        print(f"  ⚠️ No description generated for post {post.id}")
+            except Exception as e:
+                print(f"  ⚠️ Failed to describe image for post {post.id}: {e}")
+        
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+    
+    def _start_token_identification_async(self, post: Post) -> None:
+        """Start token identification agent task in background."""
+        def run_agent():
+            try:
+                token_name = self.agent_client.identify_token_name(
+                    (post.title or "") + " " + (post.content or "")
+                )
+                with self.lock:
+                    if token_name and token_name.lower() != "unknown":
+                        post.token_name = token_name
+                        print(f"  ✅ Identified token for post {post.id}: {token_name}")
+                        # Update JSON file
+                        self._update_post_in_json(post)
+            except Exception as e:
+                print(f"  ⚠️ Failed to identify token for post {post.id}: {e}")
+        
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+    
+    def _update_post_in_json(self, post: Post) -> None:
+        """Update a single post in the JSON file."""
+        try:
+            output_file = "scraped_posts.json"
+            if os.path.exists(output_file):
+                with open(output_file, 'r', encoding='utf-8') as f:
+                    all_posts = json.load(f)
+            else:
+                all_posts = []
+            
+            # Find and update the post
+            updated = False
+            for i, p in enumerate(all_posts):
+                if p.get("id") == post.id:
+                    all_posts[i] = post.to_dict()
+                    updated = True
+                    break
+            
+            if not updated:
+                # Post not found, append it
+                all_posts.append(post.to_dict())
+            
+            # Save updated JSON
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(all_posts, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"  ⚠️ Failed to update JSON for post {post.id}: {e}")
+    
+    def _extract_text_from_image(self, post_url: str) -> str:
+        """Use Agent API to describe what's in an image post.
+        
+        Args:
+            post_url: URL of the post with image
+            
+        Returns:
+            Description of the image content
+        """
+        try:
+            prompt = f"Navigate to {post_url} and describe what you see in the image. Focus on: what token/coin is mentioned, any prices or numbers, key text or information. Be concise - maximum 2-3 sentences."
+            print(f"     Creating agent task...")
+            task = self.agent_client.create_task(prompt, step_limit=10)  # Reduced steps for speed
+            print(f"     Task response: {task}")
+            task_id = task.get("taskId") or task.get("id") or task.get("task_id")
+            
+            if not task_id:
+                print(f"     ❌ No task ID found in response: {task}")
+                return ""
+            
+            print(f"     Task ID: {task_id}, polling for status...")
+            
+            # Wait for completion - Agent tasks can take a while
+            import time
+            import json
+            max_polls = 30  # Max 60 seconds (tasks navigating to URLs can be slow)
+            for i in range(max_polls):
+                task_status = self.agent_client.get_task(task_id)
+                # API uses 'state' not 'status'
+                state = task_status.get("state", "").lower() or task_status.get("status", "").lower()
+                stopped_at = task_status.get("stoppedAt")
+                result = task_status.get("result")
+                attempts = task_status.get("attemptsMade", 0)
+                
+                # Print status every 5 polls to reduce spam
+                if i % 5 == 0 or stopped_at or result:
+                    print(f"     Poll {i+1}/{max_polls}: State = '{state}', Attempts = {attempts}, Stopped = {bool(stopped_at)}, Has result = {bool(result)}")
+                
+                # Debug: Print full response structure on first poll and if we see something unexpected
+                if i == 0 or (i % 10 == 0 and not stopped_at and not result):
+                    print(f"     🔍 Full response structure: {json.dumps(task_status, indent=2, default=str)[:500]}")
+                
+                # Task is complete if stoppedAt is set or state is completed/done
+                # Also check if result exists even if state is still "active" (API might lag)
+                if stopped_at or state in ["completed", "done", "success", "finished"] or result:
+                    # Extract result - it's a string that may contain the answer at the end
+                    final_result = (
+                        result or
+                        task_status.get("output", "") or 
+                        task_status.get("data", {}).get("result", "") or
+                        task_status.get("response", "") or
+                        task_status.get("data", {}).get("output", "")
+                    )
+                    
+                    if final_result:
+                        # For image descriptions, keep the full description text (not just token name)
+                        result_str = str(final_result).strip()
+                        
+                        # Remove JSON-like structures and clean up
+                        result_str = re.sub(r"\{.*?'answer'\s*:\s*['\"]", "", result_str)
+                        result_str = re.sub(r"['\"].*", "", result_str)
+                        result_str = result_str.strip()
+                        
+                        # Filter out agent internal reasoning (common patterns)
+                        # If it starts with "I have evaluated", "I have", "Step", etc., it's likely internal reasoning
+                        if re.match(r'^(I have evaluated|I have|Step \d+|I can see that|The task is|I need to)', result_str, re.IGNORECASE):
+                            print(f"     ⚠️ Got agent internal reasoning instead of description: {result_str[:100]}...")
+                            # Try to extract the actual description after the reasoning
+                            # Look for sentences that describe the image
+                            sentences = re.split(r'[.!?]\s+', result_str)
+                            # Find sentences that don't start with agent reasoning keywords
+                            valid_sentences = []
+                            skip_keywords = ['i have', 'step', 'the task', 'i need', 'i can see that', 'it appears']
+                            for sent in sentences:
+                                sent = sent.strip()
+                                if len(sent) > 20:  # Must be substantial
+                                    # Check if it's not agent reasoning
+                                    is_reasoning = any(sent.lower().startswith(kw) for kw in skip_keywords)
+                                    if not is_reasoning and not re.match(r'^[A-Z]{2,10}$', sent):  # Not just a token name
+                                        valid_sentences.append(sent)
+                            
+                            if valid_sentences:
+                                result_str = '. '.join(valid_sentences[:3])  # Take up to 3 sentences
+                                print(f"     ✅ Extracted description from reasoning: {result_str[:100]}...")
+                            else:
+                                print(f"     ⚠️ Could not extract valid description from reasoning")
+                                return ""
+                        
+                        # If result is just a single token name (like "HEGE"), it's probably wrong
+                        # Image descriptions should be longer sentences
+                        if len(result_str) < 20 and re.match(r'^[A-Z]{2,10}$', result_str):
+                            print(f"     ⚠️ Got token name instead of description: {result_str}")
+                            return ""  # Return empty if we only got a token name
+                        
+                        # Clean up common prefixes that agents add
+                        result_str = re.sub(r'^(The image shows|The image contains|I can see|In the image|This image|Image description:)\s*', '', result_str, flags=re.IGNORECASE)
+                        result_str = result_str.strip()
+                        
+                        # If result is too short or looks like just a token, skip it
+                        if len(result_str) < 15:
+                            print(f"     ⚠️ Description too short, likely invalid: {result_str}")
+                            return ""
+                        
+                        print(f"     ✅ Task completed. Description: {result_str[:100]}...")
+                        return result_str
+                    
+                    # If no result field, check if entire response is the result
+                    if not final_result:
+                        print(f"     Full task_status keys: {list(task_status.keys())}")
+                        # Maybe result is nested deeper
+                        if "data" in task_status:
+                            print(f"     Data keys: {list(task_status.get('data', {}).keys())}")
+                            print(f"     Full data: {json.dumps(task_status.get('data', {}), indent=2, default=str)[:500]}")
+                        return ""
+                elif state in ["failed", "error"]:
+                    error_msg = task_status.get("error", "") or task_status.get("message", "")
+                    print(f"     ❌ Task failed: {error_msg}")
+                    return ""
+                elif state in ["active", "running", "pending", "in_progress"] or not stopped_at:
+                    # Continue polling - task is still running
+                    # But also check if result appeared even though state is active
+                    if result:
+                        print(f"     ⚠️ Found result but state is '{state}' - extracting anyway")
+                        final_result = result or task_status.get("output", "")
+                        if final_result:
+                            return final_result.strip() if isinstance(final_result, str) else str(final_result).strip()
+                    pass
+                else:
+                    print(f"     ⚠️ Unknown state: {state}, full response keys: {list(task_status.keys())}")
+                
+                time.sleep(2)
+            
+            # Check one more time before giving up
+            final_check = self.agent_client.get_task(task_id)
+            if final_check.get("stoppedAt") or final_check.get("result"):
+                result = final_check.get("result") or final_check.get("output", "")
+                if result:
+                    print(f"     ✅ Task completed on final check. Result: {result[:100]}")
+                    return result.strip() if isinstance(result, str) else str(result).strip()
+            
+            print(f"     ⏱️ Timeout after {max_polls * 2} seconds - task may still be running in background")
+            print(f"     💡 Check Browser Cash dashboard for task status: {task_id}")
+            return ""
+        except Exception as e:
+            print(f"  ⚠️ Agent error describing image: {e}")
+            import traceback
+            traceback.print_exc()
+            return ""
+    
+    def _parse_number(self, text: str) -> int:
+        """Parse number from text (handles '1.2k', '5.3m', etc.)."""
+        if not text:
+            return 0
+        text = text.lower().strip()
+        # Remove non-numeric except decimal point and k/m
+        import re
+        match = re.search(r'([\d.]+)\s*([km]?)', text)
+        if match:
+            num = float(match.group(1))
+            suffix = match.group(2)
+            if suffix == 'k':
+                return int(num * 1000)
+            elif suffix == 'm':
+                return int(num * 1000000)
+            return int(num)
+        # Try to extract just numbers
+        numbers = re.findall(r'\d+', text)
+        return int(numbers[0]) if numbers else 0
+    
+    def scrape_comments(self, post_url: str, limit: int = 10) -> List[str]:
+        """Scrape comments from a post.
+        
+        Args:
+            post_url: URL of the post
+            limit: Maximum number of comments to scrape
+            
+        Returns:
+            List of comment texts
+        """
+        try:
+            self.client.navigate(post_url, wait_time=3)
+            
+            script = f"""
+            (function() {{
+                const comments = [];
+                // Reddit uses shreddit-comment elements
+                const commentElements = document.querySelectorAll('shreddit-comment');
+                
+                for (let i = 0; i < Math.min({limit}, commentElements.length); i++) {{
+                    const comment = commentElements[i];
+                    // Comments are in div with slot="comment" or id ending in -comment-rtjson-content
+                    const commentContent = comment.querySelector('[slot="comment"], [id*="-comment-rtjson-content"], .md');
+                    if (commentContent) {{
+                        const text = commentContent.textContent.trim();
+                        if (text && text.length > 3) {{
+                            comments.push(text);
+                        }}
+                    }}
+                }}
+                
+                return comments;
+            }})();
+            """
+            
+            result = self.client.execute_script(script)
+            comments = result if isinstance(result, list) else result.get("result", [])
+            return comments[:limit]
+        except Exception as e:
+            print(f"⚠️ Error scraping comments: {e}")
+            return []
+    
+    def take_screenshot(self, post: Post) -> str:
+        """Take a screenshot of the current page.
+        
+        Args:
+            post: Post object to associate screenshot with
+            
+        Returns:
+            Path to screenshot file
+        """
+        try:
+            if not self.client.page:
+                return None
+            
+            filename = f"post_{post.id}_{post.source.replace('/', '_')}.png"
+            filepath = os.path.join(self.screenshot_dir, filename)
+            self.client.page.screenshot(path=filepath, full_page=False)
+            return filepath
+        except Exception as e:
+            print(f"⚠️ Error taking screenshot: {e}")
+            return None
+    
+    def scrape_subreddit(self, subreddit: str, limit: int = 25, scrape_comments: bool = True, take_screenshots: bool = False, is_first: bool = False) -> List[Post]:
+        """Navigate to a subreddit and scrape its posts with full details.
+        
+        Args:
+            subreddit: Name of the subreddit
+            limit: Maximum number of posts to scrape
+            scrape_comments: Whether to scrape comments for each post
+            take_screenshots: Whether to take screenshots
+            is_first: Whether this is the first subreddit (triggers refresh)
+            
+        Returns:
+            List of Post objects
+        """
+        print(f"\n🔍 Scraping r/{subreddit}...")
+        self.navigate_to_subreddit(subreddit)
+        
+        if is_first:
+            print(f"  ⏳ Waiting 1 second...")
+            time.sleep(1)
+            print(f"  🔄 Refreshing page...")
+            self.client.navigate(f"https://www.reddit.com/r/{subreddit}/", wait_time=0)
+            print(f"  ⏳ Waiting 1 second after refresh...")
+            time.sleep(1)
+        else:
+            time.sleep(3)  # Wait for page to fully load
+        
+        posts = self.scrape_posts(subreddit, limit)
+        
+        # Enhance posts with comments and screenshots
+        for post in posts:
+            # Scrape comments if requested
+            if scrape_comments and post.link:
+                print(f"  📝 Scraping comments for post {post.id}...")
+                comments = self.scrape_comments(post.link, limit=10)
+                post.comments = comments
+                post.comment_count = len(comments)
+            
+            # Take screenshot if requested
+            if take_screenshots:
+                print(f"  📸 Taking screenshot for post {post.id}...")
+                screenshot_path = self.take_screenshot(post)
+                if screenshot_path:
+                    post.screenshot_path = screenshot_path
+        
+        return posts
+    
+    def scrape_all_subreddits(self, limit_per_subreddit: int = 25, scrape_comments: bool = True, take_screenshots: bool = False, output_file: str = "scraped_posts.json") -> List[Post]:
+        """Scrape posts from all configured subreddits.
+        
+        Args:
+            limit_per_subreddit: Maximum posts per subreddit
+            scrape_comments: Whether to scrape comments
+            take_screenshots: Whether to take screenshots
+            output_file: File to save JSON output (saves in real-time)
+            
+        Returns:
+            Combined list of all Post objects
+        """
+        all_posts = []
+        
+        try:
+            # Ensure we don't have a stale session
+            if self.client.session_id:
+                try:
+                    self.client.stop_session()
+                except:
+                    pass
+            
+            self.client.start_session()
+            
+            for idx, subreddit in enumerate(self.subreddits):
+                try:
+                    is_first = (idx == 0)
+                    posts = self.scrape_subreddit(subreddit, limit_per_subreddit, scrape_comments, take_screenshots, is_first=is_first)
+                    all_posts.extend(posts)
+                    
+                    # Save in real-time after each subreddit
+                    self._save_json_incremental(all_posts, output_file)
+                    print(f"  💾 Saved {len(all_posts)} posts so far to {output_file}")
+                    
+                    # Give background agents a moment to start
+                    time.sleep(1)
+                    
+                    time.sleep(2)  # Be nice to Reddit servers
+                except Exception as e:
+                    print(f"❌ Error scraping r/{subreddit}: {e}")
+                    continue
+            
+            print(f"\n✅ Total posts scraped: {len(all_posts)}")
+            
+            # Wait for background agents to complete (with timeout)
+            print("\n⏳ Waiting for background agent tasks to complete...")
+            max_wait = 120  # Max 2 minutes
+            waited = 0
+            while waited < max_wait:
+                # Check if any agents are still running
+                active_threads = [t for t in threading.enumerate() if t != threading.current_thread() and t.is_alive() and t.daemon]
+                if not active_threads:
+                    break
+                time.sleep(5)
+                waited += 5
+                if waited % 15 == 0:  # Print every 15 seconds
+                    print(f"  ⏳ Still waiting for agent tasks... ({waited}s/{max_wait}s)")
+            
+            if waited >= max_wait:
+                print(f"  ⚠️ Timeout waiting for agents - some may still be running")
+            else:
+                print(f"  ✅ All agent tasks completed")
+            
+        except Exception as e:
+            print(f"❌ Error in scrape_all_subreddits: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Clean up browser session (non-blocking, don't let errors stop exit)
+            try:
+                if self.client.session_id:
+                    self.client.stop_session()
+                    print("✅ Browser session closed")
+            except KeyboardInterrupt:
+                # Re-raise keyboard interrupts
+                raise
+            except Exception as e:
+                print(f"⚠️ Error closing session: {e}")
+                # Don't raise - we want to exit cleanly even if cleanup fails
+        
+        return all_posts
+    
+    def _save_json_incremental(self, posts: List[Post], output_file: str) -> None:
+        """Save posts to JSON file incrementally."""
+        try:
+            posts_dict = [post.to_dict() for post in posts]
+            json_str = json.dumps(posts_dict, indent=2, ensure_ascii=False)
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(json_str)
+        except Exception as e:
+            print(f"⚠️ Error saving JSON: {e}")
+    
+    def to_json(self, posts: List[Post], output_file: str = "scraped_posts.json") -> str:
+        """Convert posts to JSON format.
+        
+        Args:
+            posts: List of Post objects
+            output_file: Output file path
+            
+        Returns:
+            JSON string
+        """
+        posts_dict = [post.to_dict() for post in posts]
+        json_str = json.dumps(posts_dict, indent=2, ensure_ascii=False)
+        
+        # Save to file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(json_str)
+        
+        print(f"💾 Saved {len(posts)} posts to {output_file}")
+        return json_str
+
+
+def main():
+    """Main function to run the Reddit scraper."""
+    print("🚀 Starting Reddit Memecoin Scraper...")
+    print(f"📋 Monitoring {len(MEMECOIN_SUBREDDITS)} subreddits\n")
+    
+    scraper = RedditScraper()
+    posts = scraper.scrape_all_subreddits(
+        limit_per_subreddit=10,
+        scrape_comments=True,
+        take_screenshots=False  # Keep screenshots off for now - can use Agent API as fallback if scraping fails
+    )
+    
+    # Convert to JSON
+    json_output = scraper.to_json(posts)
+    
+    # Display summary
+    print("\n" + "="*60)
+    print("SCRAPED POSTS SUMMARY")
+    print("="*60)
+    
+    for i, post in enumerate(posts[:10], 1):  # Show first 10
+        print(f"\n{i}. [{post.source}] {post.title}")
+        print(f"   ⬆️ {post.upvotes_likes} | 💬 {post.comment_count} | 👤 {post.author or 'unknown'}")
+        if post.comments:
+            print(f"   💬 Comments: {len(post.comments)}")
+    
+    if len(posts) > 10:
+        print(f"\n... and {len(posts) - 10} more posts")
+    
+    print(f"\n📄 Full JSON saved to scraped_posts.json")
+
+
+if __name__ == "__main__":
+    main()
+

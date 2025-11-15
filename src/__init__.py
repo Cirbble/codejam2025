@@ -1,0 +1,2 @@
+# Memecoin Sentiment Tracker
+
