@@ -1,0 +1,41 @@
+<div class="chart-card">
+  <div class="chart-header">
+    <div class="chart-title">
+      <h2>Chart</h2>
+      <select class="coin-select" (change)="onCoinChange($event)">
+        @for (coin of dataService.coins(); track coin.id) {
+          <option [value]="coin.name + '/' + coin.symbol">{{ coin.name }}/{{ coin.symbol }}</option>
+        }
+      </select>
+    </div>
+    <div class="chart-controls">
+      <button class="control-btn">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="control-btn">USD</button>
+    </div>
+  </div>
+
+  <div class="chart-price">
+    <h1>${{ generateChartData()[generateChartData().length - 1]?.toLocaleString() || '38,252' }}.02</h1>
+  </div>
+
+  <div class="chart-timeframes">
+    @for (timeframe of timeframes; track timeframe) {
+      <button
+        class="timeframe-btn"
+        [class.active]="selectedTimeframe === timeframe"
+        (click)="selectTimeframe(timeframe)"
+      >
+        {{ timeframe }}
+      </button>
+    }
+  </div>
+
+  <div class="chart-container">
+    <canvas #chartCanvas></canvas>
+  </div>
+</div>
+

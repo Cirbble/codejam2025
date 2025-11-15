@@ -1,0 +1,35 @@
+<div class="portfolio-card">
+  <div class="portfolio-header">
+    <h2>My Portfolio</h2>
+    <button class="menu-btn">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="5" r="2" fill="currentColor"/>
+        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        <circle cx="12" cy="19" r="2" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="portfolio-list">
+    @for (coin of dataService.portfolio().coins; track coin.symbol) {
+      <div class="portfolio-item">
+        <div class="portfolio-coin-info">
+          <div class="portfolio-icon">
+            {{ coin.icon || coin.symbol.charAt(0) }}
+          </div>
+          <div class="portfolio-details">
+            <span class="portfolio-name">{{ coin.name }}</span>
+            <span class="portfolio-symbol">{{ coin.symbol }}</span>
+          </div>
+        </div>
+        <span class="portfolio-percentage">{{ coin.percentage }}%</span>
+      </div>
+    }
+    @empty {
+      <div class="empty-portfolio">
+        <p>No coins in portfolio yet</p>
+      </div>
+    }
+  </div>
+</div>
+

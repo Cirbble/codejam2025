@@ -1,0 +1,154 @@
+.dashboard {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+  padding: 40px;
+}
+
+.dashboard-header {
+  margin-bottom: 40px;
+}
+
+.header-content {
+  text-align: center;
+}
+
+.logo {
+  color: #FFD700;
+  font-size: 48px;
+  font-weight: 900;
+  margin: 0 0 8px 0;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+  letter-spacing: -1px;
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 16px;
+  margin: 0;
+  font-weight: 400;
+}
+
+.dashboard-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.demo-loader {
+  background: rgba(0, 212, 170, 0.1);
+  border: 2px solid rgba(0, 212, 170, 0.3);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.load-data-btn {
+  background: linear-gradient(135deg, #00d4aa, #00a885);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 212, 170, 0.3);
+}
+
+.load-data-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 212, 170, 0.4);
+}
+
+.load-data-btn:active {
+  transform: translateY(0);
+}
+
+.demo-note {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  margin: 8px 0 0 0;
+}
+
+.balance-section {
+  margin-bottom: 32px;
+  text-align: left;
+}
+
+.balance-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin: 0 0 8px 0;
+}
+
+.total-balance {
+  color: #fff;
+  font-size: 56px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1;
+}
+
+.cents {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 32px;
+}
+
+.coins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  border: 2px dashed rgba(255, 255, 255, 0.1);
+}
+
+.empty-state p {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
+  margin: 0;
+}
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coins-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 20px;
+  }
+
+  .logo {
+    font-size: 36px;
+  }
+
+  .total-balance {
+    font-size: 42px;
+  }
+
+  .coins-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

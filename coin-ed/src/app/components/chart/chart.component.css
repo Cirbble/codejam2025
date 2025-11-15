@@ -1,0 +1,114 @@
+.chart-card {
+  background: rgba(40, 40, 40, 0.8);
+  border-radius: 20px;
+  padding: 24px;
+  height: 100%;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chart-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.chart-title h2 {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.coin-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+}
+
+.coin-select:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.coin-select option {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.control-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chart-price {
+  margin-bottom: 24px;
+}
+
+.chart-price h1 {
+  color: #fff;
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.chart-timeframes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.timeframe-btn {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.timeframe-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.timeframe-btn.active {
+  background: #FFD700;
+  color: #000;
+}
+
+.chart-container {
+  height: 400px;
+  position: relative;
+}
+
