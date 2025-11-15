@@ -16,6 +16,8 @@ export class SettingsComponent {
 
   accountForm: FormGroup;
   isSignedIn = signal(false);
+  notification = signal<{message: string, type: 'success' | 'error'} | null>(null);
+  isLoginMode = signal(false);
 
   constructor() {
     this.accountForm = this.fb.group({
@@ -35,11 +37,21 @@ export class SettingsComponent {
     if (this.accountForm.valid) {
       this.isSignedIn.set(true);
       console.log('Account details saved:', this.accountForm.value);
+      this.notification.set({message: 'Successfully signed in! Your account details have been saved.', type: 'success'});
+      setTimeout(() => this.notification.set(null), 3000);
+    } else {
+      this.notification.set({message: 'Please fill in all required fields correctly before signing in.', type: 'error'});
+      setTimeout(() => this.notification.set(null), 3000);
     }
   }
 
   signOut(): void {
     this.isSignedIn.set(false);
+    this.accountForm.reset();
+  }
+
+  toggleMode(): void {
+    this.isLoginMode.update(mode => !mode);
     this.accountForm.reset();
   }
 }

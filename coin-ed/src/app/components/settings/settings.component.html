@@ -1,4 +1,11 @@
 <div class="settings-container">
+  <!-- Notification Message -->
+  @if (notification()) {
+    <div class="notification" [class.success]="notification()?.type === 'success'" [class.error]="notification()?.type === 'error'">
+      {{ notification()?.message }}
+    </div>
+  }
+
   <div class="settings-card">
     <!-- Header with back button -->
     <div class="settings-header">
@@ -8,7 +15,7 @@
         </svg>
       </button>
       
-      <h1 class="settings-title">Account Security</h1>
+      <h1 class="settings-title">{{ isLoginMode() ? 'Log in' : 'Sign up' }}</h1>
       
       <div class="header-spacer"></div>
     </div>
@@ -21,22 +28,13 @@
         <!-- Email Address -->
         <div class="form-group">
           <label class="form-label">Email address:</label>
-          <div class="input-with-button">
-            <input 
-              type="email" 
-              formControlName="email"
-              class="form-input"
-              placeholder="Enter email"
-              [disabled]="isSignedIn()"
-            >
-            @if (!isSignedIn()) {
-              <button type="button" class="sign-in-btn" (click)="signIn()">
-                Sign in
-              </button>
-            } @else {
-              <span class="signed-in-badge">✓ Signed in</span>
-            }
-          </div>
+          <input 
+            type="email" 
+            formControlName="email"
+            class="form-input"
+            placeholder="Enter email"
+            [disabled]="isSignedIn()"
+          >
         </div>
 
         <!-- Card Number -->
@@ -86,6 +84,20 @@
           >
         </div>
       </form>
+
+      <!-- Sign In Button at Bottom -->
+      <div class="bottom-actions">
+        @if (!isSignedIn()) {
+          <button type="button" class="sign-in-btn-bottom" (click)="signIn()">
+            {{ isLoginMode() ? 'Log in' : 'Sign up' }}
+          </button>
+          <button type="button" class="toggle-mode-btn" (click)="toggleMode()">
+            {{ isLoginMode() ? 'Need an account? Sign up' : 'Already have an account? Log in' }}
+          </button>
+        } @else {
+          <div class="signed-in-message">✓ Successfully signed in</div>
+        }
+      </div>
     </div>
   </div>
 </div>
