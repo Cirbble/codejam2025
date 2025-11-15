@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
 import { DataLoaderService } from '../../services/data-loader.service';
 import { ControlPanelComponent } from '../control-panel/control-panel.component';
@@ -21,6 +22,7 @@ import { ChartComponent } from '../chart/chart.component';
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent {
+  private router = inject(Router);
   dataService = inject(DataService);
   dataLoader = inject(DataLoaderService);
 
@@ -70,9 +72,7 @@ export class DashboardComponent {
   }
 
   openSettings(): void {
-    // Placeholder for settings page navigation
-    console.log('Settings clicked - Navigation placeholder');
-    alert('Settings page coming soon!');
+    this.router.navigate(['/settings']);
   }
 }
 
