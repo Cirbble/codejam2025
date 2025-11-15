@@ -5,6 +5,44 @@
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
+  position: relative;
+}
+
+.notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  z-index: 1000;
+  animation: slideDown 0.3s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.notification.success {
+  background: rgba(0, 212, 170, 0.95);
+  color: #000;
+  border: 2px solid rgba(0, 212, 170, 1);
+}
+
+.notification.error {
+  background: rgba(255, 107, 107, 0.95);
+  color: #fff;
+  border: 2px solid rgba(255, 107, 107, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .settings-card {
@@ -123,44 +161,59 @@
   max-width: 200px;
 }
 
-.input-with-button {
+.bottom-actions {
+  margin-top: 40px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.input-with-button .form-input {
-  flex: 1;
-}
-
-.sign-in-btn {
-  background: rgba(50, 50, 50, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 12px 24px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: 600;
+.sign-in-btn-bottom {
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.3), rgba(0, 168, 133, 0.3));
+  border: 2px solid rgba(0, 212, 170, 0.5);
+  border-radius: 12px;
+  padding: 14px 48px;
+  color: #00d4aa;
+  font-size: 16px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
-  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-.sign-in-btn:hover {
-  background: rgba(0, 212, 170, 0.2);
-  border-color: rgba(0, 212, 170, 0.5);
-  color: #00d4aa;
+.sign-in-btn-bottom:hover {
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.4), rgba(0, 168, 133, 0.4));
+  border-color: rgba(0, 212, 170, 0.8);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 212, 170, 0.3);
 }
 
-.signed-in-badge {
-  background: rgba(0, 212, 170, 0.2);
-  border: 1px solid rgba(0, 212, 170, 0.5);
-  border-radius: 8px;
-  padding: 12px 24px;
-  color: #00d4aa;
+.toggle-mode-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
   font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: underline;
+}
+
+.toggle-mode-btn:hover {
+  color: #00d4aa;
+}
+
+.signed-in-message {
+  background: rgba(0, 212, 170, 0.2);
+  border: 2px solid rgba(0, 212, 170, 0.5);
+  border-radius: 12px;
+  padding: 14px 48px;
+  color: #00d4aa;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
 }
 
 /* Responsive Design */
