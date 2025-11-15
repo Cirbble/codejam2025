@@ -42,11 +42,11 @@
 }
 
 .logo {
-  color: #FFD700;
+  color: #6B8AFF;
   font-size: 28px;
   font-weight: 900;
   margin: 0;
-  text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+  text-shadow: 0 0 20px rgba(107, 138, 255, 0.3);
   letter-spacing: -0.5px;
 }
 
@@ -77,8 +77,8 @@
 
 .settings-btn:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #FFD700;
-  border-color: rgba(255, 215, 0, 0.3);
+  color: #6B8AFF;
+  border-color: rgba(107, 138, 255, 0.3);
   transform: rotate(90deg);
 }
 
@@ -117,8 +117,8 @@
 }
 
 .coin-count {
-  background: rgba(255, 215, 0, 0.2);
-  color: #FFD700;
+  background: rgba(139, 92, 246, 0.2);
+  color: #8B5CF6;
   padding: 4px 10px;
   border-radius: 12px;
   font-size: 12px;
@@ -140,7 +140,7 @@
 }
 
 .coin-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 215, 0, 0.3);
+  background: rgba(107, 138, 255, 0.3);
   border-radius: 3px;
 }
 
@@ -157,12 +157,12 @@
 
 .coin-list-item:hover {
   background: rgba(255, 255, 255, 0.05);
-  border-left-color: rgba(255, 215, 0, 0.5);
+  border-left-color: rgba(107, 138, 255, 0.5);
 }
 
 .coin-list-item.active {
-  background: rgba(255, 215, 0, 0.1);
-  border-left-color: #FFD700;
+  background: rgba(107, 138, 255, 0.1);
+  border-left-color: #6B8AFF;
 }
 
 .coin-list-icon {
@@ -293,7 +293,7 @@
 }
 
 .main-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 215, 0, 0.3);
+  background: rgba(107, 138, 255, 0.3);
   border-radius: 4px;
 }
 
