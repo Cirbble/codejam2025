@@ -16,41 +16,24 @@ AGENT_CASH_BASE_URL = "https://agent-api.browser.cash"  # Base URL without /v1
 # Check Browser Cash dashboard or try common patterns if not set
 MILAN_HOST = os.getenv("MILAN_HOST", "gcp-usc1-1.milan-taurine.tera.space")
 
-# Reddit Subreddits to monitor for memecoins
-MEMECOIN_SUBREDDITS = [
-    "CryptoMoonShots",
-    "SatoshiStreetBets",
-    "CryptoCurrencyTrading",
-    "altcoin",
-    "defi",
-    "ethereum",
-    "solana",
-    "dogecoin",
-    "shibainu",
+# Reddit Subreddits for pump.fun and memecoin scraping (priority order)
+# Top 3 are prioritized for parallel scraping
+REDDIT_SUBREDDITS = [
+    "pumpfun",              # Direct pump.fun subreddit (HIGHEST PRIORITY - Batch 1)
+    "CryptoMoonShots",      # General memecoins (HIGH PRIORITY - Batch 1)
+    "altcoin",              # Altcoin discussions (HIGH PRIORITY - Batch 1)
+    "SolanaMemeCoins",      # Solana memecoins (Batch 2)
+    "memecoin",             # General memecoin community (Batch 2)
+    "SatoshiStreetBets",    # Crypto trading community (Batch 2)
+    "solana",               # Solana blockchain (pump.fun is on Solana) (Batch 3)
 ]
 
-# Memecoin-specific keywords to track
-MEMECOIN_KEYWORDS = [
+# Twitter hashtags to monitor
+TWITTER_HASHTAGS = [
+    "SolanaMemeCoins",
     "memecoin",
-    "meme coin",
-    "pump",
-    "moon",
-    "gem",
-    "diamond hands",
-    "to the moon",
-    "hodl",
-    "ape",
-    "wen moon",
-]
-
-# Additional sites to scrape (Twitter/X, Telegram, etc.)
-TWITTER_HANDLES = [
-    "cryptocurrency",
-    "CryptoMoonShots",
-    # Add more Twitter handles
-]
-
-TELEGRAM_CHANNELS = [
-    # Add Telegram channel IDs
+    "pumpfunlaunch",
+    "CryptoGains",
+    "pumpfun",
 ]
 
