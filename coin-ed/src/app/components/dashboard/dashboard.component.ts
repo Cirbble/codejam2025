@@ -24,8 +24,55 @@ export class DashboardComponent {
   dataService = inject(DataService);
   dataLoader = inject(DataLoaderService);
 
+  selectedCoinId: string | null = null;
+  recentlyUpdatedCoins: Set<string> = new Set();
+
   loadExampleData(): void {
     this.dataLoader.loadFromFile('/example-data.json');
+    // Mark newly loaded coins as recently updated
+    setTimeout(() => {
+      const coins = this.dataService.coins();
+      coins.forEach(coin => {
+        if (!this.recentlyUpdatedCoins.has(coin.id)) {
+          this.recentlyUpdatedCoins.add(coin.id);
+        }
+      });
+      // Clear "new" badges after 5 seconds
+      setTimeout(() => {
+        this.recentlyUpdatedCoins.clear();
+      }, 5000);
+    }, 100);
+  }
+
+  getSortedCoins() {
+    const coins = [...this.dataService.coins()];
+    // Sort by recently updated first, then by name
+    return coins.sort((a, b) => {
+      const aRecent = this.recentlyUpdatedCoins.has(a.id);
+      const bRecent = this.recentlyUpdatedCoins.has(b.id);
+      if (aRecent && !bRecent) return -1;
+      if (!aRecent && bRecent) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  selectCoin(coinId: string): void {
+    this.selectedCoinId = this.selectedCoinId === coinId ? null : coinId;
+  }
+
+  getSelectedCoin() {
+    if (!this.selectedCoinId) return null;
+    return this.dataService.coins().find(c => c.id === this.selectedCoinId);
+  }
+
+  isRecentlyUpdated(coinId: string): boolean {
+    return this.recentlyUpdatedCoins.has(coinId);
+  }
+
+  openSettings(): void {
+    // Placeholder for settings page navigation
+    console.log('Settings clicked - Navigation placeholder');
+    alert('Settings page coming soon!');
   }
 }
 
