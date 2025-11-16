@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ViewChild, ElementRef, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ScraperService } from '../../services/scraper.service';
@@ -13,7 +13,7 @@ import { ScraperService } from '../../services/scraper.service';
         <h4>Live Scraper Logs</h4>
         <span class="log-count">{{ logs().length }} messages</span>
       </div>
-      <div class="logs-container">
+      <div class="logs-container" #logsContainer>
         @for (log of logs(); track $index) {
           <div class="log-entry">{{ log }}</div>
         }
@@ -100,6 +100,29 @@ import { ScraperService } from '../../services/scraper.service';
 export class ScraperLogsComponent {
   private scraperService = inject(ScraperService);
 
+  @ViewChild('logsContainer', { static: false })
+  logsContainer?: ElementRef<HTMLDivElement>;
+
   logs = toSignal(this.scraperService.scraperLogs$, { initialValue: [] });
+
+  constructor() {
+    // Auto-scroll to bottom whenever logs change
+    effect(() => {
+      // Trigger on logs signal change
+      this.logs();
+
+      // Use setTimeout to ensure DOM is updated before scrolling
+      setTimeout(() => {
+        this.scrollToBottom();
+      }, 0);
+    });
+  }
+
+  private scrollToBottom(): void {
+    if (this.logsContainer?.nativeElement) {
+      const container = this.logsContainer.nativeElement;
+      container.scrollTop = container.scrollHeight;
+    }
+  }
 }
 
