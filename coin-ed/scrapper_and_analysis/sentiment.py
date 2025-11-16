@@ -117,19 +117,33 @@ def process_posts(input_file, output_file):
     input_path = os.path.join(script_dir, input_file)
     output_path = os.path.join(script_dir, output_file)
 
+    print(f"\n{'='*60}")
+    print(f"🧠 SENTIMENT ANALYSIS STARTING")
+    print(f"{'='*60}")
+    print(f"📂 Input file: {input_path}")
+    print(f"📂 Output file: {output_path}")
+
     # Read input JSON
     with open(input_path, 'r', encoding='utf-8') as f:
         posts = json.load(f)
 
+    print(f"📊 Total posts loaded: {len(posts)}")
+
     processed_posts = []
     skipped_count = 0
+    tokens_found = set()
 
-    for post in posts:
+    for idx, post in enumerate(posts, 1):
         # Skip posts where token_name is null
         if post.get('token_name') is None or post.get('token_name') == 'null':
             skipped_count += 1
-            print(f"Skipping post ID {post.get('id')} - token_name is null")
+            print(f"⏭️  Skipping post {idx}/{len(posts)} (ID: {post.get('id')}) - No token name")
             continue
+
+        token_name = post.get('token_name', 'UNKNOWN')
+        tokens_found.add(token_name)
+
+        print(f"🔍 Processing post {idx}/{len(posts)} - Token: {token_name}")
 
         # Analyze title sentiment
         title_sentiment = analyze_sentiment(post.get('title', ''))
@@ -168,6 +182,9 @@ def process_posts(input_file, output_file):
 
         comments_avg = sum(comment_sentiments) / len(comment_sentiments) if comment_sentiments else 0
 
+        print(f"   💬 Comments analyzed: {len(comment_sentiments)}")
+        print(f"   📈 Raw sentiment: {post['raw_sentiment_score']}")
+
         # Get engagement metrics
         platform = post.get('platform', '')
         upvotes = post.get('upvotes_likes', 0)
@@ -191,18 +208,24 @@ def process_posts(input_file, output_file):
             upvotes, comment_count, shares_or_awards
         )
 
+        print(f"   ✅ Aggregate sentiment: {post['aggregate_sentiment_score']}")
+        print(f"   ✅ Engagement score: {post['engagement_score']}")
+
         processed_posts.append(post)
 
     # Write output JSON (overwrite)
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(processed_posts, f, indent=2, ensure_ascii=False)
 
-    print(f"\n=== Sentiment Analysis Complete ===")
-    print(f"Input:  {input_path}")
-    print(f"Output: {output_path}")
-    print(f"Total posts processed: {len(processed_posts)}")
-    print(f"Posts skipped (null token_name): {skipped_count}")
-    print(f"Output saved to: {output_path}")
+    print(f"\n{'='*60}")
+    print(f"✅ SENTIMENT ANALYSIS COMPLETE")
+    print(f"{'='*60}")
+    print(f"📂 Output: {output_path}")
+    print(f"📊 Total posts processed: {len(processed_posts)}")
+    print(f"⏭️  Posts skipped (no token): {skipped_count}")
+    print(f"🪙 Unique tokens found: {len(tokens_found)}")
+    print(f"   Tokens: {', '.join(sorted(tokens_found))}")
+    print(f"{'='*60}\n")
 
 if __name__ == "__main__":
     input_file = "scraped_posts.json"

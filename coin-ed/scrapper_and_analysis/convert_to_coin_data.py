@@ -27,6 +27,8 @@ def search_token_by_name(token_name: str, chain: str = "solana") -> Optional[Dic
                Other options: 0x1 (Ethereum), 0x89 (Polygon), 0x38 (BSC)
     """
     try:
+        print(f"\n🔍 Searching for token: {token_name} on chain: {chain}")
+
         # For Solana, use Solana-specific endpoint
         if chain == "solana":
             return search_solana_token(token_name)
@@ -43,8 +45,9 @@ def search_token_by_name(token_name: str, chain: str = "solana") -> Optional[Dic
             "symbols": [token_name.upper()]
         }
 
-        print(f"  Searching for {token_name} on chain {chain}...")
+        print(f"   🌐 Calling Moralis API: {search_url}")
         response = requests.post(search_url, json=params, headers=headers)
+        print(f"   📡 API Response Status: {response.status_code}")
 
         if response.status_code == 200:
             data = response.json()
@@ -52,11 +55,14 @@ def search_token_by_name(token_name: str, chain: str = "solana") -> Optional[Dic
                 token_info = data[0]
                 address = token_info.get('address')
 
+                print(f"   ✅ Token found! Address: {address}")
+
                 if address:
                     # Get token price
+                    print(f"   💰 Fetching price data...")
                     price_data = get_token_price(address, chain)
 
-                    return {
+                    result = {
                         'address': address,
                         'name': token_info.get('name', token_name),
                         'symbol': token_info.get('symbol', token_name),
@@ -68,29 +74,39 @@ def search_token_by_name(token_name: str, chain: str = "solana") -> Optional[Dic
                         'chain': chain
                     }
 
+                    print(f"   💵 Price: ${result['price_usd']}")
+                    print(f"   🖼️  Logo: {'Found' if result['logo'] else 'Not found'}")
+
+                    return result
+            else:
+                print(f"   ⚠️ No results returned from API")
+
         # If not found on current chain, try other chains
         # Priority: Solana > Ethereum > BSC > Polygon
         if chain == "solana":
+            print(f"   🔄 Trying Ethereum...")
             # Try Ethereum
             eth_result = search_token_by_name(token_name, "0x1")
             if eth_result:
                 return eth_result
 
+            print(f"   🔄 Trying BSC...")
             # Try BSC (Binance Smart Chain)
             bsc_result = search_token_by_name(token_name, "0x38")
             if bsc_result:
                 return bsc_result
 
+            print(f"   🔄 Trying Polygon...")
             # Try Polygon
             polygon_result = search_token_by_name(token_name, "0x89")
             if polygon_result:
                 return polygon_result
 
-        print(f"  Token {token_name} not found on chain {chain}")
+        print(f"   ❌ Token {token_name} not found on any chain")
         return None
 
     except Exception as e:
-        print(f"  Error searching for token {token_name}: {str(e)}")
+        print(f"   ❌ Error searching for token {token_name}: {str(e)}")
         return None
 
 def search_jupiter_token(token_symbol: str) -> Optional[Dict]:
@@ -100,7 +116,7 @@ def search_jupiter_token(token_symbol: str) -> Optional[Dict]:
     Uses static CDN to avoid DNS issues.
     """
     try:
-        print(f"  Checking Jupiter token list for {token_symbol} logo...")
+        print(f"   🪐 Checking Jupiter token list for {token_symbol} logo...")
 
         # Use GitHub raw content as alternative (Jupiter tokens are on GitHub)
         # Or use cached/local file approach
@@ -116,7 +132,7 @@ def search_jupiter_token(token_symbol: str) -> Optional[Dict]:
                 if token.get('symbol', '').upper() == token_symbol.upper():
                     logo_uri = token.get('logoURI')
                     if logo_uri:
-                        print(f"  ✓ Found logo in Jupiter: {logo_uri[:60]}...")
+                        print(f"   ✅ Found logo in Jupiter: {logo_uri[:60]}...")
                         return {
                             'logo': logo_uri,
                             'address': token.get('address'),
@@ -125,10 +141,11 @@ def search_jupiter_token(token_symbol: str) -> Optional[Dict]:
                             'decimals': token.get('decimals', 9)
                         }
 
+        print(f"   ⚠️ No logo found in Jupiter for {token_symbol}")
         return None
 
     except Exception as e:
-        # Silently fail - Jupiter is just for logos
+        print(f"   ⚠️ Jupiter lookup failed: {str(e)}")
         return None
 
 def search_solana_token(token_symbol: str) -> Optional[Dict]:
@@ -138,7 +155,7 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
     Falls back to Jupiter for logos if DexScreener doesn't have them.
     """
     try:
-        print(f"  Searching for {token_symbol} on Solana via DexScreener...")
+        print(f"   🔍 Searching DexScreener for {token_symbol} on Solana...")
 
         # DexScreener API - free, no API key needed, great Solana support
         search_url = f"https://api.dexscreener.com/latest/dex/search?q={token_symbol}"
@@ -147,7 +164,8 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
             "Accept": "application/json"
         }
 
-        response = requests.get(search_url, headers=headers)
+        response = requests.get(search_url, headers=headers, timeout=10)
+        print(f"   📡 DexScreener API Status: {response.status_code}")
 
         if response.status_code == 200:
             data = response.json()
@@ -156,6 +174,8 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
             # Filter for Solana pairs
             solana_pairs = [p for p in pairs if p.get('chainId') == 'solana']
 
+            print(f"   📊 Found {len(solana_pairs)} Solana pairs")
+
             if solana_pairs:
                 # Get the pair with highest liquidity
                 best_pair = max(solana_pairs, key=lambda p: float(p.get('liquidity', {}).get('usd', 0) or 0))
@@ -163,6 +183,9 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
                 base_token = best_pair.get('baseToken', {})
                 price_usd = float(best_pair.get('priceUsd', 0))
                 price_change_24h = float(best_pair.get('priceChange', {}).get('h24', 0) or 0)
+
+                print(f"   💰 Price from DexScreener: ${price_usd}")
+                print(f"   📈 24h Change: {price_change_24h}%")
 
                 # Try manual logo mapping first (for well-known tokens)
                 logo = MANUAL_LOGOS.get(token_symbol.upper())
@@ -173,16 +196,18 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
 
                 token_address = base_token.get('address', 'N/A')
 
+                print(f"   📍 Token Address: {token_address}")
+
                 # Try multiple sources for logo (DexScreener -> Jupiter -> Moralis)
                 if not logo:
-                    print(f"  No logo from DexScreener, trying Jupiter...")
+                    print(f"   🔄 No logo from DexScreener, trying Jupiter...")
                     jupiter_data = search_jupiter_token(token_symbol)
                     if jupiter_data:
                         logo = jupiter_data.get('logo')
 
                 # If still no logo, try Moralis as last resort
                 if not logo and token_address != 'N/A':
-                    print(f"  No logo from Jupiter, trying Moralis...")
+                    print(f"   🔄 No logo from Jupiter, trying Moralis...")
                     moralis_logo = get_moralis_token_logo(token_address)
                     if moralis_logo:
                         logo = moralis_logo
@@ -368,16 +393,26 @@ def convert_sentiment_to_coin_data(input_file, output_file):
     input_path = os.path.join(script_dir, input_file)
     output_path = os.path.join(script_dir, '..', 'public', output_file)
 
+    print(f"\n{'='*60}")
+    print(f"🔄 CONVERTING SENTIMENT DATA TO COIN DATA")
+    print(f"{'='*60}")
+    print(f"📂 Input: {input_path}")
+    print(f"📂 Output: {output_path}")
+
     # Ensure parent output directory exists and clear previous file
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     try:
       open(output_path, 'w').close()
-    except Exception:
-      pass
+      print(f"✅ Cleared previous coin-data.json")
+    except Exception as e:
+      print(f"⚠️  Could not clear previous file: {e}")
 
+    # Read sentiment data
     # Read sentiment data
     with open(input_path, 'r', encoding='utf-8') as f:
         sentiment_data = json.load(f)
+
+    print(f"📊 Loaded {len(sentiment_data)} posts with sentiment scores")
 
     # Dictionary to group posts by token name
     coin_groups = {}
@@ -390,18 +425,28 @@ def convert_sentiment_to_coin_data(input_file, output_file):
 
         coin_groups[token_name].append(post)
 
+    print(f"🪙 Found {len(coin_groups)} unique tokens")
+    print(f"   Tokens: {', '.join(coin_groups.keys())}")
+
     # Process each coin group
     coin_data = []
 
-    print("\n=== Fetching Token Metadata from Moralis ===")
+    print(f"\n{'='*60}")
+    print(f"🌐 FETCHING TOKEN METADATA FROM APIs")
+    print(f"{'='*60}")
 
-    for token_name, posts in coin_groups.items():
-        print(f"\nProcessing: {token_name}")
+    for idx, (token_name, posts) in enumerate(coin_groups.items(), 1):
+        print(f"\n[{idx}/{len(coin_groups)}] 🪙 Processing: {token_name}")
+        print(f"   📝 Posts about this token: {len(posts)}")
 
         # Calculate averages
         avg_raw_sentiment = sum(p.get('raw_sentiment_score', 0.0) for p in posts) / len(posts)
         avg_aggregate_sentiment = sum(p.get('aggregate_sentiment_score', 0.0) for p in posts) / len(posts)
         avg_engagement = sum(p.get('engagement_score', 0.0) for p in posts) / len(posts)
+
+        print(f"   📊 Avg Raw Sentiment: {avg_raw_sentiment:.3f}")
+        print(f"   📊 Avg Aggregate Sentiment: {avg_aggregate_sentiment:.3f}")
+        print(f"   📊 Avg Engagement: {avg_engagement:.3f}")
 
         # Combine all comments from all posts
         all_comments = []
@@ -422,6 +467,8 @@ def convert_sentiment_to_coin_data(input_file, output_file):
             if comment_lower not in seen_comments:
                 seen_comments.add(comment_lower)
                 unique_comments.append(comment)
+
+        print(f"   💬 Total comments: {len(unique_comments)}")
 
         # Use the most recent post for main data
         latest_post = max(posts, key=lambda p: p.get('timestamp', ''))
@@ -453,7 +500,10 @@ def convert_sentiment_to_coin_data(input_file, output_file):
         else:
             recommendation = "SELL"
 
+        print(f"   🎯 Confidence: {confidence_percentage}% → {recommendation}")
+
         # Fetch token metadata from Moralis API
+        print(f"   🌐 Fetching metadata from APIs...")
         token_metadata = get_token_metadata_with_retry(token_name)
 
         # Default values if API call fails
@@ -474,11 +524,16 @@ def convert_sentiment_to_coin_data(input_file, output_file):
 
             # Display chain name instead of ID
             chain_name = 'Solana' if chain_id == 'solana' else chain_id
-            print(f"  ✓ Found: {token_metadata.get('name')} on {chain_name} at ${token_price:.8f}")
+            print(f"   ✅ Found: {token_metadata.get('name')} on {chain_name}")
+            print(f"   💵 Price: ${token_price:.8f}")
+            print(f"   📈 24h Change: {price_change_24h}%")
+            print(f"   📍 Address: {token_address}")
             if token_logo:
-                print(f"  ✓ Logo: {token_logo[:60]}...")
+                print(f"   🖼️  Logo: {token_logo[:60]}...")
+            else:
+                print(f"   ⚠️  No logo found")
         else:
-            print(f"  ✗ Not found in Moralis - using defaults")
+            print(f"   ❌ Token metadata not found - using defaults")
 
         # Calculate balance based on price (keep total value ~$1000)
         if token_price > 0:
@@ -528,31 +583,37 @@ def convert_sentiment_to_coin_data(input_file, output_file):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(coin_data, f, indent=2, ensure_ascii=False)
 
-    print(f"\n=== Conversion Complete ===")
-    print(f"Input (sentiment): {input_path}")
-    print(f"Output (coin-data): {output_path}")
-    print(f"Coins written: {len(coin_data)}")
+    print(f"\n{'='*60}")
+    print(f"✅ CONVERSION COMPLETE")
+    print(f"{'='*60}")
+    print(f"📂 Output: {output_path}")
+    print(f"📊 Total coins: {len(coin_data)}")
 
     # Count tokens found vs not found
     found_count = sum(1 for c in coin_data if c['address'] != 'N/A')
-    print(f"Tokens found on-chain: {found_count}/{len(coin_data)}")
+    logo_count = sum(1 for c in coin_data if c.get('logo'))
+    print(f"🌐 Tokens found on-chain: {found_count}/{len(coin_data)}")
+    print(f"🖼️  Logos found: {logo_count}/{len(coin_data)}")
 
-    print(f"\nTop 5 coins by sentiment:")
+    print(f"\n🏆 Top 5 coins by sentiment:")
     for i, coin in enumerate(coin_data[:5], 1):
         address_display = coin['address'][:10] + '...' if coin['address'] != 'N/A' else 'N/A'
         price_display = f"${coin['price']:.8f}" if coin['price'] < 1 else f"${coin['price']:.2f}"
-        print(f"{i}. {coin['name']}: Sentiment {coin['aggregate_sentiment_score']} | "
-              f"Confidence: {coin['confidence']}% | {coin['recommendation']} | "
-              f"Price: {price_display} | Address: {address_display}")
-        if coin.get('logo'):
-            print(f"   Logo: ✓")
+        logo_status = "✅" if coin.get('logo') else "❌"
+        print(f"   {i}. {coin['name']}")
+        print(f"      Sentiment: {coin['aggregate_sentiment_score']:.3f} | Confidence: {coin['confidence']}% | {coin['recommendation']}")
+        print(f"      Price: {price_display} | Address: {address_display} | Logo: {logo_status}")
 
     # Show recommendation breakdown
     buy_count = sum(1 for c in coin_data if c['recommendation'] == 'BUY')
     hold_count = sum(1 for c in coin_data if c['recommendation'] == 'HOLD')
     sell_count = sum(1 for c in coin_data if c['recommendation'] == 'SELL')
-    print(f"\nRecommendations: {buy_count} BUY | {hold_count} HOLD | {sell_count} SELL")
-    print(f"\nOutput saved to: {output_path}")
+
+    print(f"\n📊 Recommendations:")
+    print(f"   🟢 BUY:  {buy_count}")
+    print(f"   🟡 HOLD: {hold_count}")
+    print(f"   🔴 SELL: {sell_count}")
+    print(f"{'='*60}\n")
 
 if __name__ == "__main__":
     convert_sentiment_to_coin_data("sentiment.json", "coin-data.json")

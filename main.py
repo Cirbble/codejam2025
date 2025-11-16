@@ -31,7 +31,6 @@ completed_lock = threading.Lock()
 
 def scrape_single_subreddit(subreddit: str):
     """Run scraper for a single subreddit with its own dedicated Browser Cash session.
-    Includes 3-minute timeout per subreddit.
 
     Each thread gets its own scraper instance and Browser Cash session.
     """
