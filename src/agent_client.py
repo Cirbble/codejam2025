@@ -208,8 +208,8 @@ class AgentClient:
             
             # Check if we got a session limit error
             if "limit" in str(task).lower() or "403" in str(task):
-                print(f"     ⚠️ Session limit reached, skipping token identification")
-                return None
+                print(f"     ⚠️ Session limit reached during task creation, skipping token identification")
+                raise Exception("Session limit reached")
             
             # Wait for completion with shorter timeout
             import time
@@ -226,7 +226,7 @@ class AgentClient:
                     if "limit" in failed_reason.lower() or "session" in failed_reason.lower():
                         print(f"     ⚠️ Session limit reached, stopping task")
                         self.stop_task(task_id)
-                        return None
+                        raise Exception("Session limit reached")
                 
                 # Task is complete if stoppedAt is set or state is completed/done
                 if stopped_at or state in ["completed", "done", "success", "finished"]:

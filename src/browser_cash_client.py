@@ -61,23 +61,31 @@ class BrowserCashClient:
         url = f"{self.base_url}/session"
         response = requests.post(url, headers=self.headers, json={})
         
+        # Debug: Print response details
+        print(f"🔍 API Response Status: {response.status_code}")
+        print(f"🔍 API Response Headers: {dict(response.headers)}")
+        
         # Handle session limit error
         if response.status_code == 403:
             error_data = response.json() if response.text else {}
             error_msg = response.text.lower()
             if "limit" in error_msg or "limit" in str(error_data).lower():
-                print(f"⚠️ Session limit reached! Please check Browser Cash dashboard.")
+                print(f"⚠️ Session limit reached!")
+                print(f"💡 Please check Browser Cash dashboard and manually stop any running sessions.")
+                print(f"💡 Or wait a few minutes for sessions to timeout.")
                 raise Exception("Session limit reached. Please stop existing sessions in Browser Cash dashboard or wait for them to timeout.")
         
         # Accept both 200 and 201 (Created) as success
         if response.status_code not in [200, 201]:
-            print(f"❌ Error starting session: {response.status_code}")
+            print(f"❌ Error Response: {response.text}")
             response.raise_for_status()
         
         try:
             data = response.json()
+            print(f"🔍 API Response Data: {data}")
         except Exception as e:
             print(f"❌ Failed to parse JSON: {e}")
+            print(f"❌ Response Text: {response.text}")
             raise
         
         # Try different possible response formats
@@ -90,9 +98,11 @@ class BrowserCashClient:
         )
         
         if not self.session_id:
+            print(f"❌ Full response structure: {json.dumps(data, indent=2)}")
             raise ValueError(f"Failed to get session ID from response. Response keys: {list(data.keys())}")
         
         self.session_data = data
+        print(f"✅ Browser session started: {self.session_id}")
         
         # Wait for session to become active
         self.wait_for_active()
@@ -115,6 +125,7 @@ class BrowserCashClient:
             status = session.get("status")
             
             if status == "active":
+                print(f"✅ Session is active")
                 return session_data
             
             elapsed = (time.time() - start) * 1000
@@ -155,15 +166,18 @@ class BrowserCashClient:
             )
             
             self.cdp_url = external_cdp_url
+            print(f"✅ CDP URL: {external_cdp_url}")
             
             # Generate browser view URL for dashboard
             view_url = self.get_browser_view_url(external_cdp_url)
+            print(f"👀 View browser: {view_url}")
             
             # Automatically open browser view in a new tab
             try:
                 webbrowser.open(view_url)
-            except Exception:
-                pass  # Silently fail
+                print(f"🌐 Opened browser view in new tab")
+            except Exception as e:
+                print(f"⚠️ Could not open browser automatically: {e}")
             
             return external_cdp_url
             
@@ -203,45 +217,8 @@ class BrowserCashClient:
         if not PLAYWRIGHT_AVAILABLE:
             raise ImportError("Playwright is not installed. Run: pip install playwright && playwright install chromium")
         
-        # Create a new Playwright instance for this thread if needed
-        # Each BrowserCashClient instance should have its own Playwright instance
-        # This avoids conflicts when running in parallel threads
         if not self.playwright:
-            try:
-                # Try to create Playwright normally
-                self.playwright = sync_playwright().start()
-            except RuntimeError as e:
-                if "asyncio" in str(e).lower() or "event loop" in str(e).lower():
-                    # If there's an asyncio conflict, create Playwright in a new thread context
-                    # This happens when Playwright detects an asyncio event loop
-                    import threading
-                    import queue
-                    
-                    def create_playwright():
-                        return sync_playwright().start()
-                    
-                    # Create Playwright in a separate thread to avoid asyncio conflicts
-                    result_queue = queue.Queue()
-                    def worker():
-                        try:
-                            pw = create_playwright()
-                            result_queue.put(pw)
-                        except Exception as ex:
-                            result_queue.put(ex)
-                    
-                    thread = threading.Thread(target=worker, daemon=True)
-                    thread.start()
-                    thread.join(timeout=10)
-                    
-                    if not result_queue.empty():
-                        result = result_queue.get()
-                        if isinstance(result, Exception):
-                            raise result
-                        self.playwright = result
-                    else:
-                        raise RuntimeError("Failed to create Playwright instance in thread")
-                else:
-                    raise
+            self.playwright = sync_playwright().start()
         
         # Connect to existing browser via CDP (browser is already running on Browser Cash servers)
         # The browser should be running in headful mode by default on Browser Cash
@@ -267,53 +244,19 @@ class BrowserCashClient:
         
         self.connect_playwright(self.cdp_url)
     
-    def navigate(self, url: str, wait_time: int = 3, retries: int = 3) -> None:
-        """Navigate to a URL using Playwright with retry logic.
+    def navigate(self, url: str, wait_time: int = 3) -> None:
+        """Navigate to a URL using Playwright.
         Automatically connects Playwright if not already connected.
         
         Args:
             url: URL to navigate to
             wait_time: Seconds to wait after navigation for page load
-            retries: Number of retry attempts for connection errors
         """
         self.ensure_playwright_connected()
         
-        last_error = None
-        for attempt in range(retries):
-            try:
-                # Add a small delay between retries to avoid rate limiting
-                if attempt > 0:
-                    delay = min(2 ** attempt, 10)  # Exponential backoff, max 10 seconds
-                    print(f"    ⏳ Retrying navigation (attempt {attempt + 1}/{retries}) after {delay}s...")
-                    time.sleep(delay)
-                
-                # Set user agent to look more like a real browser
-                if attempt == 0:
-                    self.page.set_extra_http_headers({
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    })
-                
-                self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                time.sleep(wait_time)
-                return  # Success
-                
-            except Exception as e:
-                last_error = e
-                error_msg = str(e).lower()
-                
-                # Check if it's a connection error that we should retry
-                if any(keyword in error_msg for keyword in ["err_connection_reset", "err_connection_refused", "net::err", "timeout"]):
-                    if attempt < retries - 1:
-                        continue  # Retry
-                    else:
-                        raise Exception(f"Failed to navigate to {url} after {retries} attempts: {e}")
-                else:
-                    # Non-retryable error, raise immediately
-                    raise
-        
-        # If we get here, all retries failed
-        if last_error:
-            raise last_error
+        print(f"🌐 Navigating to: {url}")
+        self.page.goto(url, wait_until="domcontentloaded")
+        time.sleep(wait_time)
     
     def execute_script(self, script: str, retries: int = 2) -> Any:
         """Execute JavaScript in the browser session using Playwright.
@@ -344,7 +287,7 @@ class BrowserCashClient:
                         self.ensure_playwright_connected()
                         continue
                     else:
-                        # Page may have navigated - silently retry
+                        print(f"⚠️ Execution context destroyed after {retries + 1} attempts - page may have navigated")
                         raise
                 else:
                     # Other errors, don't retry
@@ -371,33 +314,11 @@ class BrowserCashClient:
         return response.json()
     
     
-    def stop_session(self, force: bool = False) -> None:
-        """Stop the current browser session.
-        
-        Args:
-            force: If True, forcefully stop without waiting for Playwright cleanup
-        """
+    def stop_session(self) -> None:
+        """Stop the current browser session."""
         session_to_stop = self.session_id
         
-        if not session_to_stop:
-            return  # No session to stop
-        
-        # FIRST: Stop the remote browser session immediately (most important)
-        try:
-            url = f"{self.base_url}/session?sessionId={session_to_stop}"
-            response = requests.delete(url, headers=self.headers, timeout=10)
-            
-            if response.status_code not in [200, 204]:
-                # Try again if first attempt failed
-                try:
-                    response = requests.delete(url, headers=self.headers, timeout=5)
-                except:
-                    pass
-        except Exception as e:
-            # Even if DELETE fails, continue with cleanup
-            pass
-        
-        # Clear local state
+        # Clear local state first (so we don't try to stop again)
         self.session_id = None
         self.session_data = None
         self.cdp_url = None
@@ -406,30 +327,48 @@ class BrowserCashClient:
         if self.browser:
             try:
                 self.browser.close()
-            except Exception:
-                pass  # Silently fail - browser may already be closed
+            except Exception as e:
+                print(f"⚠️ Error closing browser: {e}")
             finally:
                 self.browser = None
                 self.page = None
         
-        # Stop Playwright (can be slow, so make it optional)
-        if self.playwright and not force:
+        # Stop Playwright (can be slow, so wrap in try/except)
+        # Use a thread to avoid blocking on stop()
+        if self.playwright:
             import threading
             def stop_playwright():
                 try:
                     self.playwright.stop()
-                except Exception:
-                    pass  # Silently fail
+                except Exception as e:
+                    print(f"⚠️ Error stopping Playwright (may already be stopped): {e}")
             
-            # Try to stop in a non-blocking way with very short timeout
+            # Try to stop in a non-blocking way
             stop_thread = threading.Thread(target=stop_playwright, daemon=True)
             stop_thread.start()
-            stop_thread.join(timeout=0.5)
+            # Give it a short time to complete, but don't wait forever
+            stop_thread.join(timeout=2)
+            if stop_thread.is_alive():
+                print("⚠️ Playwright stop taking too long, continuing anyway...")
             
             self.playwright = None
-        elif self.playwright and force:
-            # In force mode, just clear the reference without waiting
-            self.playwright = None
+        
+        if not session_to_stop:
+            print("⚠️ No active session to stop.")
+            return
+        
+        # Session ID is passed as query parameter, not in path
+        try:
+            url = f"{self.base_url}/session?sessionId={session_to_stop}"
+            response = requests.delete(url, headers=self.headers, timeout=5)
+            
+            if response.status_code in [200, 204]:
+                print(f"🛑 Browser session stopped: {session_to_stop}")
+            else:
+                print(f"⚠️ Session stop returned {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"⚠️ Error stopping session (may already be stopped): {e}")
+            # Don't raise - session might already be stopped
     
     def __enter__(self):
         """Context manager entry."""

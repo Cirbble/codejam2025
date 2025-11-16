@@ -19,6 +19,7 @@ class Post:
     # Engagement metrics
     upvotes_likes: int = 0
     comment_count: int = 0
+    share_count: int = 0  # Twitter/X shares/retweets
     award_count: int = 0  # Reddit awards
     
     # Content
@@ -26,9 +27,13 @@ class Post:
     link: Optional[str] = None
     post_type: Optional[str] = None  # "text", "image", "link", "video"
     
+    # Media
+    screenshot_path: Optional[str] = None
+    
     # Analysis fields (can be populated later)
     sentiment_score: Optional[float] = None  # -1 to 1
     hype_score: Optional[float] = None  # Calculated metric
+    keywords_found: List[str] = field(default_factory=list)
     token_name: Optional[str] = None  # Token/coin name identified (can use Agent API if needed)
     
     
@@ -45,12 +50,15 @@ class Post:
             "post_age": self.post_age,
             "upvotes_likes": self.upvotes_likes,
             "comment_count": self.comment_count,
+            "share_count": self.share_count,
             "award_count": self.award_count,
             "comments": self.comments,
             "link": self.link,
             "post_type": self.post_type,
+            "screenshot_path": self.screenshot_path,
             "sentiment_score": self.sentiment_score,
             "hype_score": self.hype_score,
+            "keywords_found": self.keywords_found,
             "token_name": self.token_name,
         }
 

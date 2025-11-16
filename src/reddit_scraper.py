@@ -3,85 +3,109 @@ import time
 import json
 import os
 import threading
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from src.browser_cash_client import BrowserCashClient
-from src.agent_client import AgentClient
-from src.config import REDDIT_SUBREDDITS
+from src.config import MEMECOIN_SUBREDDITS
 from src.models import Post
+from src.agent_client import AgentClient
 
-# Global lock for thread-safe JSON file updates across all scraper instances
+# Global lock for JSON file operations across all scraper instances
 _json_file_lock = threading.Lock()
+
+# Global counter for unique post IDs across all scraper instances
+_global_post_id_counter = 1
+_post_id_lock = threading.Lock()
+
+# Global semaphore to limit concurrent agent calls across ALL instances
+# With 3 parallel scrapers, limit to 1 per instance = 3 total max
+_agent_semaphore = threading.Semaphore(1)
 
 
 class RedditScraper:
     """Scraper for Reddit subreddits using Browser Cash automation."""
     
-    def __init__(self):
-        """Initialize the Reddit scraper."""
+    def __init__(self, screenshot_dir: str = "screenshots"):
+        """Initialize the Reddit scraper.
+        
+        Args:
+            screenshot_dir: Directory to save screenshots
+        """
         self.client = BrowserCashClient()
         self.agent_client = AgentClient()
-        self.subreddits = REDDIT_SUBREDDITS
-        self.post_id_counter = 1
+        self.subreddits = MEMECOIN_SUBREDDITS
+        self.screenshot_dir = screenshot_dir
         
         # Store posts by ID for async updates
         self.posts_dict: Dict[int, Post] = {}
+        self.pending_agents: Dict[int, Dict] = {}  # post_id -> {task_id, type, post}
         self.lock = threading.Lock()  # For thread-safe updates
         
-        # Calculate cutoff time (1 week ago)
+        # Create screenshot directory if it doesn't exist
+        os.makedirs(screenshot_dir, exist_ok=True)
+        
+        # Calculate timestamp for 1 week ago
         self.week_ago = datetime.now() - timedelta(days=7)
-        self.week_ago_timestamp = int(self.week_ago.timestamp() * 1000)  # Unix timestamp in milliseconds
     
-    def navigate_to_subreddit(self, subreddit: str, sort: str = "hot") -> None:
-        """Navigate to a Reddit subreddit.
+    def _is_within_last_week(self, post_age: str) -> bool:
+        """Check if a post is within the last week based on its age string.
         
         Args:
-            subreddit: Name of the subreddit (without r/)
-            sort: Sort order - "hot", "new", "top", "rising"
-        """
-        url = f"https://www.reddit.com/r/{subreddit}/{sort}/"
-        # Add delay before navigation to avoid rate limiting
-        time.sleep(1)
-        self.client.navigate(url, wait_time=5, retries=3)
-    
-    def navigate_to_subreddit_new(self, subreddit: str) -> None:
-        """Navigate to a Reddit subreddit's /new page.
-        
-        Args:
-            subreddit: Name of the subreddit (without r/)
-        """
-        self.navigate_to_subreddit(subreddit, sort="new")
-    
-    def scroll_to_load_more(self) -> None:
-        """Scroll down to load more posts."""
-        script = """
-        window.scrollTo(0, document.body.scrollHeight);
-        """
-        self.client.execute_script(script)
-        time.sleep(2)  # Wait for content to load
-    
-    def is_within_last_week(self, timestamp_str: Optional[str]) -> bool:
-        """Check if a post timestamp is within the last week.
-        
-        Args:
-            timestamp_str: Timestamp string from Reddit (Unix timestamp in milliseconds)
+            post_age: String like "2 hours ago", "3 days ago", "8 hr. ago", "20 days ago"
             
         Returns:
             True if post is within last week, False otherwise
         """
-        if not timestamp_str:
-            return True  # If no timestamp, assume it's recent
+        if not post_age:
+            return True  # If we can't determine, assume it's recent
         
-        try:
-            # Reddit timestamps are Unix timestamps in milliseconds
-            post_timestamp = int(timestamp_str)
-            return post_timestamp >= self.week_ago_timestamp
-        except (ValueError, TypeError):
-            # If we can't parse, assume it's recent to be safe
+        post_age_lower = post_age.lower().strip()
+        
+        # Parse patterns like "X hours ago", "X days ago", etc.
+        hour_match = re.search(r'(\d+)\s*(?:hour|hr|h)\s*ago', post_age_lower)
+        day_match = re.search(r'(\d+)\s*(?:day|days|d)\s*ago', post_age_lower)
+        minute_match = re.search(r'(\d+)\s*(?:minute|min|m)\s*ago', post_age_lower)
+        week_match = re.search(r'(\d+)\s*(?:week|weeks|w)\s*ago', post_age_lower)
+        month_match = re.search(r'(\d+)\s*(?:month|months)\s*ago', post_age_lower)
+        year_match = re.search(r'(\d+)\s*(?:year|years)\s*ago', post_age_lower)
+        
+        # If it's months or years old, definitely not within last week
+        if month_match or year_match:
+            return False
+        
+        # If it's weeks old, check if it's more than 1 week
+        if week_match:
+            weeks = int(week_match.group(1))
+            return weeks == 0  # "0 weeks ago" or "1 week ago" is within last week
+        
+        # If it's days old, check if it's less than 7 days
+        if day_match:
+            days = int(day_match.group(1))
+            return days < 7
+        
+        # If it's hours or minutes old, definitely within last week
+        if hour_match or minute_match:
             return True
+        
+        # If we can't parse it, assume it's recent (better to scrape more than less)
+        return True
+    
+    def navigate_to_subreddit(self, subreddit: str, sort: str = "new") -> Dict[str, Any]:
+        """Navigate to a specific Reddit subreddit.
+        
+        Args:
+            subreddit: Name of the subreddit (without r/)
+            sort: Sort order ("new", "hot", "top")
+            
+        Returns:
+            Navigation result
+        """
+        url = f"https://www.reddit.com/r/{subreddit}/{sort}/"
+        return self.client.navigate(url, wait_time=5)
     
     def scrape_posts(self, subreddit: str, limit: int = 25) -> List[Post]:
-        """Scrape posts from the current Reddit page.
+        """Scrape posts from the current Reddit page with full details.
         
         Args:
             subreddit: Name of the subreddit
@@ -132,46 +156,22 @@ class RedditScraper:
                     }}
                 }}
                 
-                // Extract post age (e.g., "2 hours ago", "3 days ago")
+                // Get post age from faceplate-timeago
                 let postAge = '';
-                // Try faceplate-timeago element (Reddit's time component)
-                const timeago = post.querySelector('faceplate-timeago');
-                if (timeago) {{
-                    postAge = timeago.getAttribute('title') || timeago.textContent.trim();
-                }}
-                // Fallback: look for time element
-                if (!postAge) {{
-                    const timeEl = post.querySelector('time');
-                    if (timeEl) {{
-                        postAge = timeEl.getAttribute('title') || timeEl.textContent.trim();
-                    }}
-                }}
-                // Fallback: look for relative time text in common locations
-                if (!postAge) {{
-                    const metadata = post.querySelector('[slot="meta"], .metadata, [class*="metadata"]');
-                    if (metadata) {{
-                        const timeText = metadata.textContent || '';
-                        // Look for patterns like "2h", "3d", "2 hours ago", etc.
-                        const ageMatch = timeText.match(/(\d+\s*(?:second|minute|hour|day|week|month|year)s?\s*ago|\d+[hdwmy])/i);
-                        if (ageMatch) {{
-                            postAge = ageMatch[0];
-                        }}
-                    }}
+                const timeAgo = post.querySelector('faceplate-timeago time');
+                if (timeAgo) {{
+                    postAge = timeAgo.textContent.trim();
                 }}
                 
-                // Parse numbers
-                const upvotes = parseInt(score) || 0;
-                const comments = parseInt(commentCount) || 0;
-                
-                if (titleText) {{
+                if (titleText && titleText.length > 3) {{
                     posts.push({{
                         title: titleText,
                         content: content,
-                        author: author,
+                        score: score,
+                        comments: commentCount,
                         timestamp: timestamp,
                         postAge: postAge,
-                        upvotes: upvotes,
-                        commentCount: comments,
+                        author: author ? 'u/' + author : '',
                         url: postUrl,
                         postType: postType
                     }});
@@ -183,54 +183,431 @@ class RedditScraper:
         """
         
         try:
+            # execute_script now has retry logic for execution context errors
             result = self.client.execute_script(script, retries=2)
-            if not result:
-                print(f"  ⚠️ No posts scraped from r/{subreddit}")
+            raw_posts = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
+            
+            if not raw_posts:
+                print(f"⚠️ No posts found on page (may have navigated during scraping)")
                 return []
             
+            # Convert to Post objects
             posts = []
-            for raw_post in result:
-                try:
-                    upvotes = raw_post.get("upvotes", 0)
-                    comment_count = raw_post.get("commentCount", 0)
-                    
-                    post = Post(
-                        id=self.post_id_counter,
-                        source=f"r/{subreddit}",
-                        platform="reddit",
-                        title=raw_post.get("title"),
-                        content=raw_post.get("content"),
-                        author=raw_post.get("author"),
-                        timestamp=raw_post.get("timestamp"),
-                        post_age=raw_post.get("postAge") or None,
-                        upvotes_likes=upvotes,
-                        comment_count=comment_count,
-                        link=raw_post.get("url"),
-                        post_type=raw_post.get("postType", "text"),
-                    )
-                    
-                    # Store post in dict
-                    self.posts_dict[post.id] = post
-                    posts.append(post)
-                    self.post_id_counter += 1
-                    
-                except Exception as e:
-                    print(f"  ⚠️ Error creating post: {e}")
-                    continue
+            for raw_post in raw_posts:
+                # Parse score (handle "1.2k" format)
+                score_text = str(raw_post.get("score", "0"))
+                upvotes = self._parse_number(score_text)
+                
+                # Parse comments
+                comments_text = str(raw_post.get("comments", "0"))
+                comment_count = self._parse_number(comments_text)
+                
+                # Get unique ID from global counter
+                global _global_post_id_counter, _post_id_lock
+                with _post_id_lock:
+                    post_id = _global_post_id_counter
+                    _global_post_id_counter += 1
+                
+                post = Post(
+                    id=post_id,
+                    source=f"r/{subreddit}",
+                    platform="reddit",
+                    title=raw_post.get("title"),
+                    content=raw_post.get("content"),
+                    author=raw_post.get("author"),
+                    timestamp=raw_post.get("timestamp"),
+                    post_age=raw_post.get("postAge"),
+                    upvotes_likes=upvotes,
+                    comment_count=comment_count,
+                    link=raw_post.get("url"),
+                    post_type=raw_post.get("postType", "text"),
+                )
+                
+                # Store post in dict for async updates
+                self.posts_dict[post.id] = post
+                posts.append(post)
+                
+                # Start agent tasks in background (non-blocking)
+                if not post.content and post.post_type == "image" and post.link:
+                    print(f"  🤖 Starting image description for post {post.id} (background)...")
+                    self._start_image_description_async(post)
+                
+                # Start token identification in background (non-blocking)
+                if (post.title or post.content) and not post.token_name:
+                    print(f"  🤖 Starting token identification for post {post.id} (background)...")
+                    self._start_token_identification_async(post)
             
-            print(f"📊 Scraped {len(posts)} posts from r/{subreddit}")
+            print(f"📊 Scraped {len(posts)} posts")
             return posts
-            
         except Exception as e:
             error_msg = str(e)
             if "Execution context was destroyed" in error_msg:
-                print(f"❌ Error scraping posts: Page navigated during execution.")
+                print(f"❌ Error scraping posts: Page navigated during execution. This can happen if Reddit redirects or the page refreshes.")
             else:
                 print(f"❌ Error scraping posts: {e}")
             return []
     
+    def _start_image_description_async(self, post: Post) -> None:
+        """Start image description agent task in background with queuing."""
+        global _agent_semaphore
+        
+        def run_agent():
+            # Acquire semaphore to limit concurrent agent calls
+            _agent_semaphore.acquire()
+            try:
+                image_description = self._extract_text_from_image(post.link)
+                with self.lock:
+                    if image_description:
+                        post.content = image_description
+                        print(f"  ✅ Image described for post {post.id}: {image_description[:80]}...")
+                        # Update JSON file
+                        self._update_post_in_json(post)
+                    else:
+                        print(f"  ⚠️ No description generated for post {post.id}")
+            except Exception as e:
+                print(f"  ⚠️ Failed to describe image for post {post.id}: {e}")
+            finally:
+                # Release semaphore so next queued call can proceed
+                _agent_semaphore.release()
+        
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+    
+    def _extract_token_from_title(self, title: str) -> Optional[str]:
+        """Extract token name from title if it contains $TOKEN pattern.
+        
+        Args:
+            title: Post title
+            
+        Returns:
+            Token name if found (2-5 uppercase letters after $), None otherwise
+        """
+        if not title:
+            return None
+        
+        # Pattern: $ followed by 2-5 uppercase letters/numbers
+        match = re.search(r'\$([A-Z0-9]{2,5})\b', title)
+        if match:
+            token = match.group(1)
+            # Skip common words that aren't tokens
+            skip_words = {"THE", "THIS", "THAT", "WITH", "FROM", "HAVE", "HERE", "THERE"}
+            if token not in skip_words:
+                return token
+        
+        return None
+    
+    def _start_token_identification_async(self, post: Post) -> None:
+        """Start token identification agent task in background with queuing."""
+        global _agent_semaphore
+        
+        def run_agent():
+            # First, check if title has $TOKEN pattern (fast, no agent call needed)
+            if post.title:
+                quick_token = self._extract_token_from_title(post.title)
+                if quick_token:
+                    with self.lock:
+                        post.token_name = quick_token
+                        print(f"  ✅ Found token in title for post {post.id}: {quick_token}")
+                        # Update JSON file
+                        self._update_post_in_json(post)
+                    return  # Skip agent call
+            
+            # No $TOKEN in title, use agent
+            # Acquire semaphore to limit concurrent agent calls
+            _agent_semaphore.acquire()
+            try:
+                # Combine title, content, and first few comments for better token detection
+                post_text = (post.title or "") + " " + (post.content or "")
+                if post.comments:
+                    # Add first 5 comments to help identify tokens mentioned in comments
+                    comments_text = " ".join(post.comments[:5])
+                    post_text += " " + comments_text
+                
+                print(f"  🔍 Identifying token for post {post.id}: {post.title[:50]}...")
+                
+                # Retry logic for session limit errors
+                max_retries = 3
+                token_name = None
+                for attempt in range(max_retries):
+                    try:
+                        token_name = self.agent_client.identify_token_name(post_text)
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if "session limit" in error_str or "limit reached" in error_str:
+                            if attempt < max_retries - 1:
+                                wait_time = (attempt + 1) * 2  # 2s, 4s, 6s
+                                print(f"  ⏳ Session limit hit, waiting {wait_time}s before retry {attempt + 2}/{max_retries}...")
+                                time.sleep(wait_time)
+                                continue
+                            else:
+                                print(f"  ⚠️ Session limit reached after {max_retries} attempts for post {post.id}")
+                                return
+                        else:
+                            # Other error, don't retry
+                            raise
+                
+                with self.lock:
+                    if token_name and token_name.lower() != "unknown":
+                        post.token_name = token_name
+                        print(f"  ✅ Identified token for post {post.id}: {token_name}")
+                        # Update JSON file
+                        self._update_post_in_json(post)
+                    else:
+                        print(f"  ⚠️ No token identified for post {post.id} (agent returned: {token_name})")
+            except Exception as e:
+                print(f"  ⚠️ Failed to identify token for post {post.id}: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                # Release semaphore so next queued call can proceed
+                _agent_semaphore.release()
+        
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+    
+    def _update_post_in_json(self, post: Post) -> None:
+        """Update a single post in the JSON file (thread-safe)."""
+        global _json_file_lock
+        try:
+            output_file = "scraped_posts.json"
+            
+            with _json_file_lock:
+                all_posts = []
+                
+                # Try to read existing file
+                if os.path.exists(output_file):
+                    try:
+                        with open(output_file, 'r', encoding='utf-8') as f:
+                            content = f.read().strip()
+                            if content:
+                                all_posts = json.loads(content)
+                    except (json.JSONDecodeError, ValueError) as e:
+                        print(f"  ⚠️ JSON file corrupted, starting fresh: {e}")
+                        all_posts = []
+                
+                # Find and update the post
+                updated = False
+                for i, p in enumerate(all_posts):
+                    if p.get("id") == post.id:
+                        all_posts[i] = post.to_dict()
+                        updated = True
+                        break
+                
+                if not updated:
+                    # Post not found, append it
+                    all_posts.append(post.to_dict())
+                
+                # Save updated JSON
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(all_posts, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"  ⚠️ Failed to update JSON for post {post.id}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _extract_text_from_image(self, post_url: str) -> str:
+        """Use Agent API to describe what's in an image post.
+        Uses the current browser session if available to avoid Reddit blocking.
+        
+        Args:
+            post_url: URL of the post with image
+            
+        Returns:
+            Description of the image content
+        """
+        try:
+            # Try to use current browser session if available
+            cdp_url = None
+            if self.client.cdp_url:
+                cdp_url = self.client.cdp_url
+                # Use a prompt that works with the current page context
+                prompt = f"On the current page (URL: {post_url}), describe what you see in the image. Focus on: what token/coin is mentioned, any prices or numbers, key text or information. Be concise - maximum 2-3 sentences."
+                print(f"     Creating agent task with current session for image description...")
+            else:
+                # Fallback: navigate to URL (may get blocked)
+                prompt = f"Navigate to {post_url} and describe what you see in the image. Focus on: what token/coin is mentioned, any prices or numbers, key text or information. Be concise - maximum 2-3 sentences. If you encounter any errors or cannot access the page, return 'ERROR: Could not access page'."
+                print(f"     Creating agent task (new session) for image description...")
+            
+            try:
+                task = self.agent_client.create_task(prompt, step_limit=10, cdp_url=cdp_url)  # Pass CDP URL if available
+                print(f"     Task response: {task}")
+            except Exception as e:
+                print(f"     ❌ Failed to create agent task: {e}")
+                return ""
+            
+            task_id = task.get("taskId") or task.get("id") or task.get("task_id")
+            
+            if not task_id:
+                print(f"     ❌ No task ID found in response: {task}")
+                return ""
+            
+            print(f"     Task ID: {task_id}, polling for status...")
+            
+            # Wait for completion - Agent tasks can take a while
+            import time
+            import json
+            max_polls = 30  # Max 60 seconds (tasks navigating to URLs can be slow)
+            for i in range(max_polls):
+                task_status = self.agent_client.get_task(task_id)
+                # API uses 'state' not 'status'
+                state = task_status.get("state", "").lower() or task_status.get("status", "").lower()
+                stopped_at = task_status.get("stoppedAt")
+                result = task_status.get("result")
+                attempts = task_status.get("attemptsMade", 0)
+                
+                # Print status every 5 polls to reduce spam
+                if i % 5 == 0 or stopped_at or result:
+                    print(f"     Poll {i+1}/{max_polls}: State = '{state}', Attempts = {attempts}, Stopped = {bool(stopped_at)}, Has result = {bool(result)}")
+                
+                # Debug: Print full response structure on first poll and if we see something unexpected
+                if i == 0 or (i % 10 == 0 and not stopped_at and not result):
+                    print(f"     🔍 Full response structure: {json.dumps(task_status, indent=2, default=str)[:500]}")
+                
+                # Task is complete if stoppedAt is set or state is completed/done
+                # Also check if result exists even if state is still "active" (API might lag)
+                if stopped_at or state in ["completed", "done", "success", "finished"] or result:
+                    # Extract result - it's a string that may contain the answer at the end
+                    final_result = (
+                        result or
+                        task_status.get("output", "") or 
+                        task_status.get("data", {}).get("result", "") or
+                        task_status.get("response", "") or
+                        task_status.get("data", {}).get("output", "")
+                    )
+                    
+                    if final_result:
+                        # For image descriptions, keep the full description text (not just token name)
+                        result_str = str(final_result).strip()
+                        
+                        # Remove JSON-like structures and clean up
+                        result_str = re.sub(r"\{.*?'answer'\s*:\s*['\"]", "", result_str)
+                        result_str = re.sub(r"['\"].*", "", result_str)
+                        result_str = result_str.strip()
+                        
+                        # Filter out agent internal reasoning (common patterns)
+                        # If it starts with "I have evaluated", "I have", "Step", etc., it's likely internal reasoning
+                        if re.match(r'^(I have evaluated|I have|Step \d+|I can see that|The task is|I need to)', result_str, re.IGNORECASE):
+                            print(f"     ⚠️ Got agent internal reasoning instead of description: {result_str[:100]}...")
+                            # Try to extract the actual description after the reasoning
+                            # Look for sentences that describe the image
+                            sentences = re.split(r'[.!?]\s+', result_str)
+                            # Find sentences that don't start with agent reasoning keywords
+                            valid_sentences = []
+                            skip_keywords = ['i have', 'step', 'the task', 'i need', 'i can see that', 'it appears']
+                            for sent in sentences:
+                                sent = sent.strip()
+                                if len(sent) > 20:  # Must be substantial
+                                    # Check if it's not agent reasoning
+                                    is_reasoning = any(sent.lower().startswith(kw) for kw in skip_keywords)
+                                    if not is_reasoning and not re.match(r'^[A-Z]{2,10}$', sent):  # Not just a token name
+                                        valid_sentences.append(sent)
+                            
+                            if valid_sentences:
+                                result_str = '. '.join(valid_sentences[:3])  # Take up to 3 sentences
+                                print(f"     ✅ Extracted description from reasoning: {result_str[:100]}...")
+                            else:
+                                print(f"     ⚠️ Could not extract valid description from reasoning")
+                                return ""
+                        
+                        # If result is just a single token name (like "HEGE"), it's probably wrong
+                        # Image descriptions should be longer sentences
+                        if len(result_str) < 20 and re.match(r'^[A-Z]{2,10}$', result_str):
+                            print(f"     ⚠️ Got token name instead of description: {result_str}")
+                            return ""  # Return empty if we only got a token name
+                        
+                        # Clean up common prefixes that agents add
+                        result_str = re.sub(r'^(The image shows|The image contains|I can see|In the image|This image|Image description:)\s*', '', result_str, flags=re.IGNORECASE)
+                        result_str = result_str.strip()
+                        
+                        # If result is too short or looks like just a token, skip it
+                        if len(result_str) < 15:
+                            print(f"     ⚠️ Description too short, likely invalid: {result_str}")
+                            return ""
+                        
+                        print(f"     ✅ Task completed. Description: {result_str[:100]}...")
+                        return result_str
+                    
+                    # If no result field, check if entire response is the result
+                    if not final_result:
+                        print(f"     Full task_status keys: {list(task_status.keys())}")
+                        # Maybe result is nested deeper
+                        if "data" in task_status:
+                            print(f"     Data keys: {list(task_status.get('data', {}).keys())}")
+                            print(f"     Full data: {json.dumps(task_status.get('data', {}), indent=2, default=str)[:500]}")
+                        return ""
+                elif state in ["failed", "error"]:
+                    failed_reason = task_status.get("failedReason", "")
+                    error_msg = task_status.get("error", "") or task_status.get("message", "")
+                    
+                    # Print failure reason prominently
+                    if failed_reason:
+                        print(f"     ❌ Task failed: {failed_reason}")
+                    elif error_msg:
+                        print(f"     ❌ Task failed: {error_msg}")
+                    else:
+                        print(f"     ❌ Task failed (no reason provided)")
+                    
+                    # Print full error details for debugging
+                    if failed_reason and failed_reason != error_msg:
+                        print(f"     🔍 Failed reason: {failed_reason}")
+                    if error_msg and error_msg != failed_reason:
+                        print(f"     🔍 Error details: {error_msg}")
+                    
+                    return ""
+                elif state in ["active", "running", "pending", "in_progress"] or not stopped_at:
+                    # Continue polling - task is still running
+                    # But also check if result appeared even though state is active
+                    if result:
+                        print(f"     ⚠️ Found result but state is '{state}' - extracting anyway")
+                        final_result = result or task_status.get("output", "")
+                        if final_result:
+                            return final_result.strip() if isinstance(final_result, str) else str(final_result).strip()
+                    pass
+                else:
+                    print(f"     ⚠️ Unknown state: {state}, full response keys: {list(task_status.keys())}")
+                
+                time.sleep(2)
+            
+            # Check one more time before giving up
+            final_check = self.agent_client.get_task(task_id)
+            if final_check.get("stoppedAt") or final_check.get("result"):
+                result = final_check.get("result") or final_check.get("output", "")
+                if result:
+                    print(f"     ✅ Task completed on final check. Result: {result[:100]}")
+                    return result.strip() if isinstance(result, str) else str(result).strip()
+            
+            print(f"     ⏱️ Timeout after {max_polls * 2} seconds - task may still be running in background")
+            print(f"     💡 Check Browser Cash dashboard for task status: {task_id}")
+            return ""
+        except Exception as e:
+            print(f"  ⚠️ Agent error describing image: {e}")
+            import traceback
+            traceback.print_exc()
+            return ""
+    
+    def _parse_number(self, text: str) -> int:
+        """Parse number from text (handles '1.2k', '5.3m', etc.)."""
+        if not text:
+            return 0
+        text = text.lower().strip()
+        # Remove non-numeric except decimal point and k/m
+        import re
+        match = re.search(r'([\d.]+)\s*([km]?)', text)
+        if match:
+            num = float(match.group(1))
+            suffix = match.group(2)
+            if suffix == 'k':
+                return int(num * 1000)
+            elif suffix == 'm':
+                return int(num * 1000000)
+            return int(num)
+        # Try to extract just numbers
+        numbers = re.findall(r'\d+', text)
+        return int(numbers[0]) if numbers else 0
+    
     def scrape_comments(self, post_url: str, limit: int = 10) -> List[str]:
-        """Scrape comments from a Reddit post.
+        """Scrape comments from a post.
         
         Args:
             post_url: URL of the post
@@ -240,286 +617,423 @@ class RedditScraper:
             List of comment texts
         """
         try:
-            self.client.navigate(post_url, wait_time=2)
-            time.sleep(2)  # Reduced wait time for comments to load
+            self.client.navigate(post_url, wait_time=3)
+            
+            # Wait a bit more for comments to load
+            import time
+            time.sleep(2)
             
             script = f"""
             (function() {{
                 const comments = [];
-                // Try multiple selectors for Reddit comments
-                let commentElements = document.querySelectorAll('shreddit-comment');
-                
-                // If no shreddit-comment found, try other selectors
-                if (commentElements.length === 0) {{
-                    commentElements = document.querySelectorAll('[data-testid="comment"], .Comment, .comment');
-                }}
-                
-                console.log('Found ' + commentElements.length + ' comment elements');
+                // Reddit uses shreddit-comment elements
+                const commentElements = document.querySelectorAll('shreddit-comment');
                 
                 for (let i = 0; i < Math.min({limit}, commentElements.length); i++) {{
                     const comment = commentElements[i];
-                    let text = '';
-                    
-                    // Try multiple ways to extract comment text
-                    // Method 1: slot="comment" or rtjson content
-                    let commentContent = comment.querySelector('[slot="comment"], [id*="-comment-rtjson-content"]');
+                    // Comments are in div with slot="comment" or id ending in -comment-rtjson-content
+                    const commentContent = comment.querySelector('[slot="comment"], [id*="-comment-rtjson-content"], .md');
                     if (commentContent) {{
-                        text = commentContent.textContent.trim();
-                    }}
-                    
-                    // Method 2: .md class (markdown content)
-                    if (!text || text.length < 3) {{
-                        commentContent = comment.querySelector('.md, [class*="md"]');
-                        if (commentContent) {{
-                            text = commentContent.textContent.trim();
+                        const text = commentContent.textContent.trim();
+                        if (text && text.length > 3) {{
+                            comments.push(text);
                         }}
-                    }}
-                    
-                    // Method 3: Direct textContent if it's substantial
-                    if (!text || text.length < 3) {{
-                        text = comment.textContent.trim();
-                        // Filter out very short or navigation text
-                        if (text.length < 10 || text.includes('permalink') || text.includes('reply')) {{
-                            text = '';
-                        }}
-                    }}
-                    
-                    if (text && text.length > 3) {{
-                        comments.push(text);
                     }}
                 }}
                 
-                console.log('Extracted ' + comments.length + ' comments');
                 return comments;
             }})();
             """
             
+            # execute_script now has retry logic for execution context errors
             result = self.client.execute_script(script, retries=2)
             comments = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
-            
-            if comments:
-                print(f"    💬 Scraped {len(comments)} comments")
-            return comments if isinstance(comments, list) else []
-            
+            return comments[:limit] if comments else []
         except Exception as e:
-            print(f"    ⚠️ Error scraping comments: {e}")
+            error_msg = str(e)
+            if "Execution context was destroyed" in error_msg:
+                print(f"⚠️ Error scraping comments: Page navigated during execution. Skipping comments for this post.")
+            else:
+                print(f"⚠️ Error scraping comments: {e}")
             return []
     
-    def monitor_subreddit(self, subreddit: str, output_file: str = "scraped_posts.json", check_interval: int = 30):
-        """Continuously monitor a subreddit's /new page for new posts.
+    def take_screenshot(self, post: Post) -> str:
+        """Take a screenshot of the current page.
         
         Args:
-            subreddit: Subreddit to monitor (without r/)
-            output_file: JSON file to save posts to
-            check_interval: Seconds between checks for new posts
-        """
-        print(f"🔍 Starting monitoring for r/{subreddit}")
-        
-        # Navigate to /new page
-        self.navigate_to_subreddit_new(subreddit)
-        
-        seen_links = set()  # Track seen post links to avoid duplicates
-        
-        try:
-            while True:
-                # Scrape new posts
-                posts = self.scrape_posts(subreddit, limit=20)
-                
-                new_count = 0
-                for post in posts:
-                    # Check if we've seen this post before
-                    if post.link and post.link in seen_links:
-                        continue
-                    
-                    # Mark as seen
-                    if post.link:
-                        seen_links.add(post.link)
-                    
-                    # Save to JSON immediately (latest first)
-                    self._update_post_in_json(post, output_file)
-                    new_count += 1
-                
-                if new_count > 0:
-                    print(f"  📝 Added {new_count} new posts from r/{subreddit}")
-                
-                # Refresh page to get latest posts
-                self.navigate_to_subreddit_new(subreddit)
-                
-                # Wait before next check
-                time.sleep(check_interval)
-                
-        except KeyboardInterrupt:
-            print(f"\n⚠️ Stopping monitoring for r/{subreddit}")
-        except Exception as e:
-            print(f"  ❌ Error monitoring r/{subreddit}: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def scrape_subreddit_historical(self, subreddit: str, pages: int = 5, posts_per_page: int = 25, output_file: str = "scraped_posts.json") -> List[Post]:
-        """Scrape historical posts from a subreddit (only last week, stops when older posts found).
-        
-        Args:
-            subreddit: Subreddit to scrape (without r/)
-            pages: Maximum number of pages to scrape (will stop early if old posts found)
-            posts_per_page: Posts to scrape per page
-            output_file: JSON file to save posts to
+            post: Post object to associate screenshot with
             
         Returns:
-            List of all Post objects scraped
+            Path to screenshot file
         """
-        print(f"\n📊 Scraping r/{subreddit} (last week only)...")
+        try:
+            if not self.client.page:
+                return None
+            
+            filename = f"post_{post.id}_{post.source.replace('/', '_')}.png"
+            filepath = os.path.join(self.screenshot_dir, filename)
+            self.client.page.screenshot(path=filepath, full_page=False)
+            return filepath
+        except Exception as e:
+            print(f"⚠️ Error taking screenshot: {e}")
+            return None
+    
+    def scrape_subreddit(self, subreddit: str, limit: int = 25, scrape_comments: bool = True, take_screenshots: bool = False, is_first: bool = False) -> List[Post]:
+        """Navigate to a subreddit and scrape posts from the past week.
+        
+        Args:
+            subreddit: Name of the subreddit
+            limit: Maximum number of posts per page (not total limit)
+            scrape_comments: Whether to scrape comments for each post
+            take_screenshots: Whether to take screenshots
+            is_first: Whether this is the first subreddit (triggers refresh)
+            
+        Returns:
+            List of Post objects from the past week
+        """
+        print(f"\n🔍 Scraping r/{subreddit} (past week)...")
         all_posts = []
-        seen_links = set()
+        page_num = 1
         
-        # Navigate to subreddit /new page
+        # Navigate to /new page
         self.navigate_to_subreddit(subreddit, sort="new")
-        time.sleep(1)  # Reduced wait time
         
-        page_num = 0
-        while page_num < pages:
-            page_num += 1
-            print(f"  📄 Page {page_num}...")
+        if is_first:
+            print(f"  ⏳ Waiting 1 second...")
+            time.sleep(1)
+            print(f"  🔄 Refreshing page...")
+            self.client.navigate(f"https://www.reddit.com/r/{subreddit}/new/", wait_time=0)
+            print(f"  ⏳ Waiting 2 seconds after refresh...")
+            time.sleep(2)
+        else:
+            time.sleep(3)  # Wait for page to fully load
+        
+        # Keep scraping pages until we find posts older than a week
+        seen_links = set()  # Track seen post links to avoid duplicates
+        
+        while True:
+            print(f"  📄 Scraping page {page_num}...")
+            page_posts = self.scrape_posts(subreddit, limit)
             
-            # Scrape posts from current page
-            posts = self.scrape_posts(subreddit, limit=posts_per_page)
-            
-            if not posts:
-                print(f"    ⚠️ No more posts found, stopping")
+            if not page_posts:
+                print(f"  ⚠️ No posts found on page {page_num}, stopping")
                 break
             
-            # Filter duplicates and check timestamps
-            new_posts = []
+            # Check if any post is older than a week and filter duplicates
             found_old_post = False
-            
-            # First pass: filter posts by timestamp and duplicates
-            valid_posts = []
-            for post in posts:
-                # Check if post is within last week
-                if not self.is_within_last_week(post.timestamp):
-                    print(f"    ⏹️ Found post older than 1 week, stopping scraping")
+            new_posts_this_page = 0
+            for post in page_posts:
+                # Skip duplicates
+                if post.link and post.link in seen_links:
+                    continue
+                
+                # Check age
+                if post.post_age and not self._is_within_last_week(post.post_age):
+                    print(f"  ⏹️ Found post older than 1 week: '{post.post_age}' - stopping")
                     found_old_post = True
                     break
                 
-                # Check for duplicates
-                if post.link and post.link not in seen_links:
-                    seen_links.add(post.link)
-                    valid_posts.append(post)
-            
-            # Second pass: scrape comments (synchronous, fast)
-            for post in valid_posts:
-                # Scrape comments for this post
+                # Add to seen links and all_posts
                 if post.link:
-                    print(f"    💬 Scraping comments for: {post.title[:50] if post.title else 'post'}...")
-                    comments = self.scrape_comments(post.link, limit=10)
-                    post.comments = comments
-                    post.comment_count = len(comments)
-                    
-                    # Navigate back to subreddit /new listing
-                    self.navigate_to_subreddit(subreddit, sort="new")
-                    time.sleep(1)  # Reduced wait time
-                
-                new_posts.append(post)
+                    seen_links.add(post.link)
                 all_posts.append(post)
-                
-                # Save immediately (without token - will be added async later)
-                self._update_post_in_json(post, output_file)
-                
-                # Start token identification in background (async)
-                self._identify_token_async(post, output_file)
+                new_posts_this_page += 1
             
-            if new_posts:
-                print(f"    ✅ Found {len(new_posts)} new posts (total: {len(all_posts)})")
-            
-            # Stop if we found an old post
             if found_old_post:
                 break
             
-            # If not last page, scroll to load more
-            if page_num < pages:
-                self.scroll_to_load_more()
-                time.sleep(1)  # Reduced wait time
+            # If no new posts this page, we've seen everything
+            if new_posts_this_page == 0:
+                print(f"  ✅ No new posts on page {page_num}, stopping")
+                break
+            
+            # Navigate to next page by scrolling and loading more
+            print(f"  ⏭️ Loading next page...")
+            try:
+                # Scroll multiple times to trigger infinite scroll loading
+                # Reddit uses infinite scroll, so we need to scroll aggressively
+                for scroll_attempt in range(5):
+                    self.client.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(2)  # Wait for new posts to load
+                
+                # Wait a bit more for Reddit's infinite scroll to load
+                time.sleep(3)
+                
+                # If we got fewer posts than expected, scroll even more aggressively
+                if len(page_posts) < limit:
+                    print(f"  ⚠️ Only got {len(page_posts)} posts (expected {limit}), scrolling more aggressively...")
+                    # Try scrolling more aggressively
+                    for _ in range(10):
+                        self.client.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        time.sleep(1)
+                    time.sleep(4)  # Wait longer for more posts to load
+            except Exception as e:
+                print(f"  ⚠️ Error scrolling: {e}, stopping")
+                break
+            
+            page_num += 1
+            
+            # Safety limit: don't scrape more than 50 pages
+            if page_num > 50:
+                print(f"  ⚠️ Reached page limit (50), stopping")
+                break
         
-        print(f"  ✅ Scraped {len(all_posts)} total posts from r/{subreddit} (last week)")
+        print(f"  ✅ Scraped {len(all_posts)} posts from past week")
+        
+        # Enhance posts with comments and screenshots
+        for post in all_posts:
+            # Scrape comments if requested
+            if scrape_comments and post.link:
+                print(f"  📝 Scraping comments for post {post.id}...")
+                comments = self.scrape_comments(post.link, limit=10)
+                post.comments = comments
+                post.comment_count = len(comments)
+                
+                # Now that we have comments, try token identification again if it wasn't found
+                if not post.token_name and (post.title or post.content):
+                    print(f"  🤖 Retrying token identification for post {post.id} with comments...")
+                    self._start_token_identification_async(post)
+            
+            # Take screenshot if requested
+            if take_screenshots:
+                print(f"  📸 Taking screenshot for post {post.id}...")
+                screenshot_path = self.take_screenshot(post)
+                if screenshot_path:
+                    post.screenshot_path = screenshot_path
+        
         return all_posts
     
-    def _identify_token_async(self, post: Post, output_file: str) -> None:
-        """Identify token name in background (async) and update JSON when done.
+    def scrape_all_subreddits(self, limit_per_subreddit: int = 25, scrape_comments: bool = True, take_screenshots: bool = False, output_file: str = "scraped_posts.json") -> List[Post]:
+        """Scrape posts from all configured subreddits.
         
         Args:
-            post: Post object to identify token for
-            output_file: JSON file to update
+            limit_per_subreddit: Maximum posts per subreddit
+            scrape_comments: Whether to scrape comments
+            take_screenshots: Whether to take screenshots
+            output_file: File to save JSON output (saves in real-time)
+            
+        Returns:
+            Combined list of all Post objects
         """
-        def run_token_id():
+        all_posts = []
+        
+        try:
+            # Ensure we don't have a stale session
+            if self.client.session_id:
+                try:
+                    self.client.stop_session()
+                except:
+                    pass
+            
+            self.client.start_session()
+            
+            for idx, subreddit in enumerate(self.subreddits):
+                try:
+                    is_first = (idx == 0)
+                    posts = self.scrape_subreddit(subreddit, limit_per_subreddit, scrape_comments, take_screenshots, is_first=is_first)
+                    all_posts.extend(posts)
+                    
+                    # Save in real-time after each subreddit
+                    self._save_json_incremental(all_posts, output_file)
+                    # Note: The actual saved count includes merged posts from other instances
+                    
+                    # Give background agents a moment to start
+                    time.sleep(1)
+                    
+                    time.sleep(2)  # Be nice to Reddit servers
+                except Exception as e:
+                    print(f"❌ Error scraping r/{subreddit}: {e}")
+                    continue
+            
+            print(f"\n✅ Total posts scraped: {len(all_posts)}")
+            
+            # Wait for background agents to complete (with timeout)
+            print("\n⏳ Waiting for background agent tasks to complete...")
+            max_wait = 120  # Max 2 minutes
+            waited = 0
+            while waited < max_wait:
+                # Check if any agents are still running
+                active_threads = [t for t in threading.enumerate() if t != threading.current_thread() and t.is_alive() and t.daemon]
+                if not active_threads:
+                    break
+                time.sleep(5)
+                waited += 5
+                if waited % 15 == 0:  # Print every 15 seconds
+                    print(f"  ⏳ Still waiting for agent tasks... ({waited}s/{max_wait}s)")
+            
+            if waited >= max_wait:
+                print(f"  ⚠️ Timeout waiting for agents - some may still be running")
+            else:
+                print(f"  ✅ All agent tasks completed")
+            
+        except KeyboardInterrupt:
+            print("\n\n⚠️ Interrupted by user. Cleaning up...")
+            # Don't re-raise immediately - try to clean up first
             try:
-                # Combine all text sources for token detection
-                post_text_parts = []
-                if post.title:
-                    post_text_parts.append(post.title)
-                if post.content:
-                    post_text_parts.append(post.content)
-                if post.comments:
-                    # Include first few comments (they often mention tokens)
-                    comments_text = " ".join(post.comments[:5])  # First 5 comments
-                    post_text_parts.append(comments_text)
-                
-                post_text = " ".join(post_text_parts).strip()
-                
-                if post_text:
-                    token_name = self.agent_client.identify_token_name(post_text)
-                    if token_name and token_name.upper() != "UNKNOWN":
-                        post.token_name = token_name.upper()
-                        print(f"    ✅ Token identified for post {post.id}: {post.token_name}")
-                        # Update JSON with token name
-                        self._update_post_in_json(post, output_file)
+                if self.client.session_id:
+                    self.client.stop_session()
+                    print("✅ Browser session closed")
             except Exception as e:
-                error_msg = str(e).lower()
-                if "limit" not in error_msg and "session" not in error_msg:
-                    print(f"    ⚠️ Token identification failed for post {post.id}: {e}")
-        
-        # Start token identification in background thread
-        thread = threading.Thread(target=run_token_id, daemon=True)
-        thread.start()
-    
-    def _update_post_in_json(self, post: Post, output_file: str) -> None:
-        """Update JSON file with a new post (thread-safe, appends for oldest first).
-        
-        Args:
-            post: Post object to add/update
-            output_file: Path to JSON file
-        """
-        # Use global lock for file operations across all scraper instances
-        with _json_file_lock:
+                print(f"⚠️ Error closing session during interrupt: {e}")
+            raise  # Re-raise after cleanup attempt
+        except Exception as e:
+            print(f"❌ Error in scrape_all_subreddits: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Clean up browser session (non-blocking, don't let errors stop exit)
             try:
+                if self.client.session_id:
+                    self.client.stop_session()
+                    print("✅ Browser session closed")
+            except KeyboardInterrupt:
+                # If we get another interrupt during cleanup, just exit
+                print("\n⚠️ Interrupted during cleanup. Exiting...")
+                import sys
+                sys.exit(0)
+            except Exception as e:
+                print(f"⚠️ Error closing session: {e}")
+                # Don't raise - we want to exit cleanly even if cleanup fails
+        
+        return all_posts
+    
+    def _save_json_incremental(self, posts: List[Post], output_file: str) -> None:
+        """Save posts to JSON file incrementally (thread-safe, merges with existing data)."""
+        global _json_file_lock
+        try:
+            with _json_file_lock:
                 # Read existing posts
-                all_posts = []
+                existing_posts = []
                 if os.path.exists(output_file):
                     try:
                         with open(output_file, 'r', encoding='utf-8') as f:
                             content = f.read().strip()
                             if content:
-                                all_posts = json.loads(content)
-                            else:
-                                all_posts = []
-                    except json.JSONDecodeError:
-                        all_posts = []
+                                existing_posts = json.loads(content)
+                    except (json.JSONDecodeError, ValueError):
+                        existing_posts = []
                 
-                # Check if post already exists (by link)
-                updated = False
-                for i, p in enumerate(all_posts):
-                    if p.get("link") == post.link and post.link:
-                        all_posts[i] = post.to_dict()
-                        updated = True
-                        break
+                # Create a dict of existing posts by (source, link) to avoid duplicates
+                existing_dict = {}
+                for p in existing_posts:
+                    key = (p.get("source"), p.get("link"))
+                    if key not in existing_dict:
+                        existing_dict[key] = p
                 
-                if not updated:
-                    # New post - append to end (oldest first, 1, 2, 3...)
-                    all_posts.append(post.to_dict())
+                # Add new posts, avoiding duplicates
+                new_posts_dict = [post.to_dict() for post in posts]
+                for new_post in new_posts_dict:
+                    key = (new_post.get("source"), new_post.get("link"))
+                    if key not in existing_dict:
+                        existing_dict[key] = new_post
+                    else:
+                        # Update existing post with new data (e.g., token_name, comments)
+                        existing_dict[key].update(new_post)
                 
-                # Save updated JSON
+                # Convert back to list
+                all_posts = list(existing_dict.values())
+                
+                # Sort by ID if available, otherwise by source
+                all_posts.sort(key=lambda x: (x.get("source", ""), x.get("id", 0)))
+                
+                # Write merged data
+                json_str = json.dumps(all_posts, indent=2, ensure_ascii=False)
                 with open(output_file, 'w', encoding='utf-8') as f:
-                    json.dump(all_posts, f, indent=2, ensure_ascii=False)
-                    
-            except Exception as e:
-                print(f"  ⚠️ Failed to update JSON for post {post.id}: {e}")
-                import traceback
-                traceback.print_exc()
+                    f.write(json_str)
+                
+                # Print actual saved count (merged from all instances)
+                print(f"  💾 Saved {len(all_posts)} total posts to {output_file} (merged from all instances)")
+        except Exception as e:
+            print(f"⚠️ Error saving JSON: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def to_json(self, posts: List[Post], output_file: str = "scraped_posts.json") -> str:
+        """Convert posts to JSON format (thread-safe, merges with existing data).
+        
+        Args:
+            posts: List of Post objects
+            output_file: Output file path
+            
+        Returns:
+            JSON string
+        """
+        global _json_file_lock
+        
+        with _json_file_lock:
+            # Read existing posts
+            existing_posts = []
+            if os.path.exists(output_file):
+                try:
+                    with open(output_file, 'r', encoding='utf-8') as f:
+                        content = f.read().strip()
+                        if content:
+                            existing_posts = json.loads(content)
+                except (json.JSONDecodeError, ValueError):
+                    existing_posts = []
+            
+            # Create a dict of existing posts by (source, link) to avoid duplicates
+            existing_dict = {}
+            for p in existing_posts:
+                key = (p.get("source"), p.get("link"))
+                if key not in existing_dict:
+                    existing_dict[key] = p
+            
+            # Add new posts, avoiding duplicates
+            new_posts_dict = [post.to_dict() for post in posts]
+            for new_post in new_posts_dict:
+                key = (new_post.get("source"), new_post.get("link"))
+                if key not in existing_dict:
+                    existing_dict[key] = new_post
+                else:
+                    # Update existing post with new data
+                    existing_dict[key].update(new_post)
+            
+            # Convert back to list and sort
+            all_posts = list(existing_dict.values())
+            all_posts.sort(key=lambda x: (x.get("source", ""), x.get("id", 0)))
+            
+            # Save merged data
+            json_str = json.dumps(all_posts, indent=2, ensure_ascii=False)
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(json_str)
+        
+        print(f"💾 Saved {len(all_posts)} total posts to {output_file} (merged with existing)")
+        return json_str
+
+
+def main():
+    """Main function to run the Reddit scraper."""
+    print("🚀 Starting Reddit Memecoin Scraper...")
+    print(f"📋 Monitoring {len(MEMECOIN_SUBREDDITS)} subreddits\n")
+    
+    scraper = RedditScraper()
+    posts = scraper.scrape_all_subreddits(
+        limit_per_subreddit=10,
+        scrape_comments=True,
+        take_screenshots=False  # Keep screenshots off for now - can use Agent API as fallback if scraping fails
+    )
+    
+    # Convert to JSON
+    json_output = scraper.to_json(posts)
+    
+    # Display summary
+    print("\n" + "="*60)
+    print("SCRAPED POSTS SUMMARY")
+    print("="*60)
+    
+    for i, post in enumerate(posts[:10], 1):  # Show first 10
+        print(f"\n{i}. [{post.source}] {post.title}")
+        print(f"   ⬆️ {post.upvotes_likes} | 💬 {post.comment_count} | 👤 {post.author or 'unknown'}")
+        if post.comments:
+            print(f"   💬 Comments: {len(post.comments)}")
+    
+    if len(posts) > 10:
+        print(f"\n... and {len(posts) - 10} more posts")
+    
+    print(f"\n📄 Full JSON saved to scraped_posts.json")
+
+
+if __name__ == "__main__":
+    main()
+
