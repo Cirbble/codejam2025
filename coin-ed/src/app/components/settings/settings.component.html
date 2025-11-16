@@ -87,6 +87,32 @@
         }
       </form>
 
+      <!-- Account Balance Section -->
+      <div class="balance-section">
+        <h2 class="section-title">Account Balance</h2>
+        <p class="section-description">Set your starting account balance for trading simulations</p>
+        
+        <form [formGroup]="balanceForm" class="balance-form">
+          <div class="form-group">
+            <label class="form-label">Current Balance: ${{ getCurrentBalance().toLocaleString() }}</label>
+            <div class="balance-input-group">
+              <span class="currency-symbol">$</span>
+              <input 
+                type="number" 
+                formControlName="balance"
+                class="form-input balance-input"
+                placeholder="100000"
+                min="0"
+                step="1000"
+              >
+            </div>
+          </div>
+          <button type="button" class="update-balance-btn" (click)="updateBalance()">
+            Update Balance
+          </button>
+        </form>
+      </div>
+
       <!-- Sign In Button at Bottom -->
       <div class="bottom-actions">
         @if (!isSignedIn()) {

@@ -21,12 +21,14 @@ export class DataService {
     sellerEnabled: false
   });
   transactions = signal<Transaction[]>([]);
+  accountBalance = signal<number>(100000); // Default $100,000
 
   // Buyer agent interval
   private buyerInterval: any = null;
   
-  // Notification callback
+  // Notification callbacks
   onBuyNotification?: (message: string) => void;
+  onInsufficientFunds?: () => void;
 
   constructor() {
     // Load data from coin-data.json
@@ -34,6 +36,9 @@ export class DataService {
 
     // Load transactions from localStorage
     this.loadTransactions();
+
+    // Load account balance from localStorage
+    this.loadAccountBalance();
 
     // Subscribe to live scraper updates
     this.scraperService.scraperData$.subscribe(posts => {
@@ -289,7 +294,35 @@ export class DataService {
     
     // Calculate purchase amount based on confidence (1-5 dollars)
     const confidence = randomCoin.confidence || 50;
-    const purchaseAmount = Math.max(1, Math.min(5, Math.floor((confidence / 100) * 5)));
+    let purchaseAmount = Math.max(1, Math.min(5, Math.floor((confidence / 100) * 5)));
+
+    // Check if we have enough balance
+    const currentBalance = this.accountBalance();
+    if (currentBalance < purchaseAmount) {
+      // Not enough funds - try to buy with remaining balance if >= $1
+      if (currentBalance >= 1) {
+        purchaseAmount = Math.floor(currentBalance);
+      } else {
+        console.log(`⚠️ Insufficient funds: $${currentBalance.toFixed(2)} available, $${purchaseAmount} needed. Stopping buyer agent.`);
+        
+        // Stop the buyer agent
+        this.stopBuyerAgent();
+        const current = this.agentControls();
+        this.agentControls.set({ ...current, buyerEnabled: false });
+        
+        // Notify user
+        if (this.onInsufficientFunds) {
+          this.onInsufficientFunds();
+        }
+        
+        return; // Skip this purchase
+      }
+    }
+
+    // Deduct from account balance
+    const newBalance = currentBalance - purchaseAmount;
+    this.accountBalance.set(newBalance);
+    this.saveAccountBalance();
 
     // Create transaction record
     const transaction: Transaction = {
@@ -392,6 +425,52 @@ export class DataService {
         }
       } catch (error) {
         console.error('Error loading transactions:', error);
+      }
+    }
+  }
+
+  /**
+   * Set account balance
+   */
+  setAccountBalance(amount: number): void {
+    this.accountBalance.set(amount);
+    this.saveAccountBalance();
+  }
+
+  /**
+   * Get account balance
+   */
+  getAccountBalance(): number {
+    return this.accountBalance();
+  }
+
+  /**
+   * Save account balance to localStorage
+   */
+  private saveAccountBalance(): void {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('account-balance', JSON.stringify(this.accountBalance()));
+      } catch (error) {
+        console.error('Error saving account balance:', error);
+      }
+    }
+  }
+
+  /**
+   * Load account balance from localStorage
+   */
+  private loadAccountBalance(): void {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('account-balance');
+        if (saved) {
+          const balance = JSON.parse(saved);
+          this.accountBalance.set(balance);
+          console.log(`Loaded account balance: $${balance.toLocaleString()}`);
+        }
+      } catch (error) {
+        console.error('Error loading account balance:', error);
       }
     }
   }

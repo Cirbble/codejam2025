@@ -44,6 +44,17 @@ export class DashboardComponent implements AfterViewInit {
       }
     };
 
+    // Handle insufficient funds notification
+    this.dataService.onInsufficientFunds = () => {
+      if (this.notificationComponent) {
+        this.notificationComponent.addNotification(
+          'AI Buyer stopped due to insufficient funds. Please add more balance in settings.',
+          'sell',
+          'Insufficient Funds'
+        );
+      }
+    };
+
     // Expose transaction methods to console for debugging
     if (typeof window !== 'undefined') {
       (window as any).viewTransactions = () => {
