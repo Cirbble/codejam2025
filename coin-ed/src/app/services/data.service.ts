@@ -22,8 +22,16 @@ export class DataService {
   });
 
   constructor() {
-    // Load data from coin-data.json
+    // Load data from coin-data.json with retry for initial load
     this.loadCoinData();
+    
+    // Retry loading after a short delay if no coins loaded (handles file mid-write)
+    setTimeout(() => {
+      if (this.coins().length === 0) {
+        console.log('No coins loaded on initial attempt, retrying...');
+        this.loadCoinData();
+      }
+    }, 2000);
 
     // Subscribe to live scraper updates
     this.scraperService.scraperData$.subscribe(posts => {
@@ -46,8 +54,15 @@ export class DataService {
     // Listen for coin-data-updated custom event dispatched by ScraperService
     if (typeof window !== 'undefined') {
       window.addEventListener('coin-data-updated', () => {
-        console.log('🔄 Reloading coin data after coin_data_updated event');
+        console.log('Reloading coin data after coin_data_updated event');
         this.loadCoinData();
+      });
+      
+      // Listen for explicit clear event (only clear when explicitly told to)
+      window.addEventListener('coin-data-cleared', () => {
+        console.log('Clearing coin data after explicit clear event');
+        this.coins.set([]);
+        this.updatePortfolio();
       });
     }
 
@@ -55,7 +70,7 @@ export class DataService {
     this.scraperService.scraperLogs$.subscribe(logs => {
       const lastLog = logs[logs.length - 1];
       if (lastLog && /Coin data updated/gi.test(lastLog)) {
-        console.log('🔄 Reloading coin data triggered from log fallback');
+        console.log('Reloading coin data triggered from log fallback');
         this.loadCoinData();
       }
     });
@@ -228,13 +243,39 @@ export class DataService {
       // Use relative path that works in both browser and SSR, add cache-busting
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200';
       const ts = Date.now();
+      console.log(`Loading coin data from ${baseUrl}/coin-data.json?ts=${ts}`);
       const response = await fetch(`${baseUrl}/coin-data.json?ts=${ts}`, { cache: 'no-store' });
 
       if (!response.ok) {
-        throw new Error(`Failed to load coin data: ${response.status} ${response.statusText}`);
+        // If file doesn't exist or error, keep existing coins (don't clear)
+        console.log('WARNING: coin-data.json not found or error - keeping existing coins');
+        return;
       }
 
-      const coinDataArray = await response.json();
+      // Read response as text first to check if it's valid JSON
+      const text = await response.text();
+      
+      // If empty or whitespace, keep existing coins
+      if (!text || text.trim() === '' || text.trim() === '[]') {
+        console.log('WARNING: coin-data.json is empty - keeping existing coins');
+        return;
+      }
+
+      // Try to parse JSON
+      let coinDataArray: any[];
+      try {
+        coinDataArray = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Error parsing coin-data.json (file may be mid-write):', parseError);
+        // Keep existing coins if JSON is invalid (file might be mid-write)
+        return;
+      }
+
+      // If array is empty, keep existing coins (don't clear during processing)
+      if (!coinDataArray || coinDataArray.length === 0) {
+        console.log('WARNING: coin-data.json is empty - keeping existing coins');
+        return;
+      }
 
       const coins: Coin[] = coinDataArray.map((item: any) => ({
         id: item.id,
@@ -258,12 +299,13 @@ export class DataService {
         latestPost: this.extractPostData(item)
       }));
 
+      console.log(`Loaded ${coins.length} coins from coin-data.json`);
       this.coins.set(coins);
       this.updatePortfolio();
     } catch (error) {
       console.error('Error loading coin data:', error);
-      // Fallback to empty array if file can't be loaded
-      this.coins.set([]);
+      // Keep existing coins on error (don't clear)
+      // Only clear if explicitly told to via coin_data_updated with 0 coins
     }
   }
 

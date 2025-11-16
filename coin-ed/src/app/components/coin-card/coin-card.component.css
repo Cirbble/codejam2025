@@ -203,3 +203,33 @@
   transition: width 0.8s ease, background 0.3s ease;
   box-shadow: 0 0 10px currentColor;
 }
+
+.recommendation-badge {
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  width: 100%;
+}
+
+.recommendation-badge.buy {
+  color: #00d4aa;
+  background: rgba(0, 212, 170, 0.15);
+  border: 1px solid rgba(0, 212, 170, 0.3);
+}
+
+.recommendation-badge.hold {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.recommendation-badge.sell {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.15);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}

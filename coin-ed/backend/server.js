@@ -43,7 +43,7 @@ function broadcast(data) {
 
   // Log broadcast for debugging (only for important events)
   if (data.type === 'scraper_stopped' || data.type === 'coin_data_updated') {
-    console.log(`📡 Broadcasted ${data.type} to ${clientCount} client(s)`);
+    console.log(`Broadcasted ${data.type} to ${clientCount} client(s)`);
   }
 }
 
@@ -63,18 +63,218 @@ const scrapedPostsPath = path.join(__dirname, '../scrapper_and_analysis/scraped_
 const coinDataPath = path.join(__dirname, '../public/coin-data.json');
 const watcher = chokidar.watch(scrapedPostsPath, { persistent: true, ignoreInitial: false });
 
+// Debounce for real-time processing (wait 3 seconds after last change before processing)
+// This ensures we process the complete state of the file after all changes settle
+let processingTimeout = null;
+let isProcessing = false;
+
+function triggerRealTimeProcessing() {
+  // Clear existing timeout
+  if (processingTimeout) {
+    clearTimeout(processingTimeout);
+  }
+  
+  // Set new timeout to process after 3 seconds of no changes
+  // This debounce ensures we don't process on every single write, but still respond quickly
+  processingTimeout = setTimeout(() => {
+    if (isProcessing) {
+      console.log('Processing already in progress, will retry after current process completes...');
+      // Retry after a delay if currently processing
+      setTimeout(() => triggerRealTimeProcessing(), 2000);
+      return;
+    }
+    
+    if (!fs.existsSync(scrapedPostsPath)) {
+      console.log('scraped_posts.json deleted - clearing coin data');
+      // File was deleted, clear coin data
+      try {
+        fs.writeFileSync(coinDataPath, '[]', 'utf8');
+        broadcast({ type: 'coin_data_updated', coins: 0, timestamp: new Date().toISOString() });
+      } catch (e) {
+        console.error('Error clearing coin-data.json:', e.message);
+      }
+      return;
+    }
+    
+    // Read current state of scraped_posts.json
+    let posts = [];
+    try {
+      const data = fs.readFileSync(scrapedPostsPath, 'utf8');
+      posts = JSON.parse(data || '[]');
+    } catch (e) {
+      console.error('Error reading scraped_posts.json for processing:', e.message);
+      return;
+    }
+    
+    // If empty, keep existing coins visible (don't clear during processing)
+    if (!posts || posts.length === 0) {
+      console.log('scraped_posts.json is empty - keeping existing coins visible');
+      return;
+    }
+    
+    isProcessing = true;
+    console.log(`Real-time processing: Running sentiment analysis on ${posts.length} posts...`);
+    broadcast({ type: 'scraper_log', message: `Processing ${posts.length} posts for sentiment analysis...`, timestamp: new Date().toISOString() });
+    
+    // Run sentiment analysis on the current state of the file
+    const sentimentScriptPath = path.join(__dirname, '../scrapper_and_analysis/sentiment.py');
+    // On Windows, try 'py' launcher first, then 'python', then 'python3'
+    let pythonCmd = 'python3';
+    if (process.platform === 'win32') {
+      pythonCmd = 'py'; // Python launcher on Windows
+    }
+    const sentProc = spawn(pythonCmd, [sentimentScriptPath], {
+      cwd: path.join(__dirname, '../scrapper_and_analysis'),
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+      shell: true // Use shell on Windows to find Python
+    });
+    
+    sentProc.stdout.on('data', (data) => {
+      const msg = data.toString();
+      process.stdout.write(`[Sentiment] ${msg}`);
+      broadcast({ type: 'scraper_log', message: `[Sentiment] ${msg}`, timestamp: new Date().toISOString() });
+    });
+    
+    sentProc.stderr.on('data', (data) => {
+      const msg = data.toString();
+      process.stderr.write(`[Sentiment Error] ${msg}`);
+      broadcast({ type: 'scraper_log', message: `[Sentiment Error] ${msg}`, timestamp: new Date().toISOString() });
+    });
+    
+    sentProc.on('close', (scode) => {
+      if (scode === 0) {
+        console.log('Sentiment analysis complete - running conversion...');
+        broadcast({ type: 'scraper_log', message: 'Sentiment analysis complete, converting to coin data...', timestamp: new Date().toISOString() });
+        
+        // Run conversion to update coin-data.json
+        const convertScriptPath = path.join(__dirname, '../scrapper_and_analysis/convert_to_coin_data.py');
+        // On Windows, try 'py' launcher first, then 'python', then 'python3'
+        let pythonCmd = 'python3';
+        if (process.platform === 'win32') {
+          pythonCmd = 'py'; // Python launcher on Windows
+        }
+        const convertProcess = spawn(pythonCmd, [convertScriptPath], {
+          cwd: path.join(__dirname, '../scrapper_and_analysis'),
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+          shell: true // Use shell on Windows to find Python
+        });
+        
+        convertProcess.stdout.on('data', (data) => {
+          const msg = data.toString();
+          process.stdout.write(`[Convert] ${msg}`);
+          broadcast({ type: 'scraper_log', message: `[Convert] ${msg}`, timestamp: new Date().toISOString() });
+        });
+        
+        convertProcess.stderr.on('data', (data) => {
+          const msg = data.toString();
+          process.stderr.write(`[Convert Error] ${msg}`);
+          broadcast({ type: 'scraper_log', message: `[Convert Error] ${msg}`, timestamp: new Date().toISOString() });
+        });
+        
+        convertProcess.on('close', (code) => {
+          isProcessing = false;
+          if (code === 0) {
+            console.log('Real-time processing complete - updating frontend');
+            
+            // Read and broadcast updated coin data
+            let coinData = [];
+            try {
+              if (fs.existsSync(coinDataPath)) {
+                const raw = fs.readFileSync(coinDataPath, 'utf8');
+                coinData = JSON.parse(raw || '[]');
+              }
+            } catch (e) {
+              console.error('Error reading coin-data.json:', e.message);
+            }
+            
+            console.log(`Broadcasting ${coinData.length} coins to frontend`);
+            broadcast({ type: 'coin_data_updated', coins: coinData.length, timestamp: new Date().toISOString() });
+          } else {
+            console.error(`WARNING: Conversion script exited with code ${code}`);
+            broadcast({ type: 'scraper_log', message: `WARNING: Conversion script exited with code ${code}`, timestamp: new Date().toISOString() });
+          }
+        });
+      } else {
+        isProcessing = false;
+        console.error(`⚠️  Sentiment script exited with code ${scode}`);
+        broadcast({ type: 'scraper_log', message: `⚠️  Sentiment script exited with code ${scode}`, timestamp: new Date().toISOString() });
+      }
+    });
+  }, 3000); // Wait 3 seconds after last change (reduced from 5s for faster updates)
+}
+
 watcher.on('add', (p) => {
-  console.log(`📝 File created: ${p}`);
+  console.log(`File created: ${p}`);
+  triggerRealTimeProcessing();
 });
 
 watcher.on('change', (p) => {
-  console.log(`📝 File changed: ${p}`);
+  console.log(`File changed: ${p}`);
   try {
-    const data = fs.readFileSync(scrapedPostsPath, 'utf8');
-    const posts = JSON.parse(data || '[]');
+    // Retry reading the file if it's being written to (handles "Unexpected end of JSON input")
+    let data = null;
+    let posts = [];
+    let retries = 3;
+    
+    for (let i = 0; i < retries; i++) {
+      try {
+        data = fs.readFileSync(scrapedPostsPath, 'utf8');
+        if (!data || data.trim() === '') {
+          posts = [];
+          break;
+        }
+        posts = JSON.parse(data);
+        break; // Success, exit retry loop
+      } catch (parseError) {
+        if (parseError.message.includes('Unexpected end of JSON') || parseError.message.includes('JSON')) {
+          if (i < retries - 1) {
+            // Wait a bit and retry (file might be mid-write)
+            // Use a simple busy-wait since we're in a synchronous context
+            const start = Date.now();
+            while (Date.now() - start < 200) {
+              // Busy wait for 200ms
+            }
+            continue;
+          } else {
+            // Last retry failed, log and skip this change
+            console.log(`WARNING: Could not parse JSON after ${retries} attempts (file may be mid-write), skipping...`);
+            return;
+          }
+        } else {
+          // Other error, don't retry
+          throw parseError;
+        }
+      }
+    }
+    
+    // Always broadcast the current state to frontend immediately
     broadcast({ type: 'scraper_update', data: posts, timestamp: new Date().toISOString() });
+    
+    // If file is empty, don't clear coin data (keep existing coins visible)
+    // Only clear when file is explicitly deleted (handled in 'unlink' event)
+    if (!posts || posts.length === 0) {
+      console.log('scraped_posts.json is empty - keeping existing coins visible');
+      return; // Don't trigger processing for empty file, but don't clear coins either
+    }
+    
+    // Trigger real-time processing (debounced) for ANY change to the file
+    // This will process the entire current state and update sentiment/coin data
+    console.log(`Detected change: ${posts.length} posts in file - will process in 3s...`);
+    triggerRealTimeProcessing();
   } catch (error) {
     console.error('Error reading scraped_posts.json:', error.message);
+  }
+});
+
+watcher.on('unlink', (p) => {
+  console.log(`File deleted: ${p}`);
+  // File was deleted, clear coin data immediately
+  try {
+    fs.writeFileSync(coinDataPath, '[]', 'utf8');
+    broadcast({ type: 'coin_data_updated', coins: 0, timestamp: new Date().toISOString() });
+    broadcast({ type: 'scraper_update', data: [], timestamp: new Date().toISOString() });
+  } catch (e) {
+    console.error('Error clearing coin-data.json:', e.message);
   }
 });
 
@@ -87,15 +287,20 @@ app.post('/api/scraper/start', (_req, res) => {
   try {
     // Ensure file exists and is cleared
     fs.writeFileSync(scrapedPostsPath, '[]', 'utf8');
-    console.log('🗑️  Cleared scraped_posts.json');
+    console.log('Cleared scraped_posts.json');
 
     // Start Python scraper
-    const pythonPath = 'python3';
+    // Use 'python' on Windows, 'python3' on Unix/Mac
+    const pythonPath = process.platform === 'win32' ? 'python' : 'python3';
     const scriptPath = path.join(__dirname, '../../main.py');
 
     scraperProcess = spawn(pythonPath, [scriptPath], {
       cwd: path.join(__dirname, '../..'),
-      env: { ...process.env },
+      env: { 
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',  // Force UTF-8 encoding for Python output
+        PYTHONUTF8: '1'  // Enable UTF-8 mode in Python 3.7+
+      },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -144,7 +349,7 @@ app.post('/api/scraper/start', (_req, res) => {
       broadcast({ type: 'scraper_stopped', code, timestamp: new Date().toISOString() });
 
       if (code === 0) {
-        console.log('✅ Scraping complete - data processed automatically by main.py');
+        console.log('Scraping complete - data processed automatically by main.py');
       }
     });
 
@@ -167,7 +372,7 @@ app.post('/api/scraper/stop', (_req, res) => {
     broadcast({ type: 'scraper_stopped', code: null, timestamp: new Date().toISOString() });
 
     // 1) Run sentiment analysis to produce sentiment.json from scraped_posts.json
-    console.log('🧠 Running sentiment analysis on scraped posts...');
+    console.log('Running sentiment analysis on scraped posts...');
     const sentimentScriptPath = path.join(__dirname, '../scrapper_and_analysis/sentiment.py');
 
     const sentProc = spawn('python3', [sentimentScriptPath], {
@@ -197,7 +402,7 @@ app.post('/api/scraper/stop', (_req, res) => {
       }
 
       // 2) Run conversion script to process sentiment.json into public/coin-data.json
-      console.log('🔄 Running conversion script on sentiment output...');
+      console.log('Running conversion script on sentiment output...');
       const convertScriptPath = path.join(__dirname, '../scrapper_and_analysis/convert_to_coin_data.py');
 
       const convertProcess = spawn('python3', [convertScriptPath], {
@@ -219,7 +424,7 @@ app.post('/api/scraper/stop', (_req, res) => {
 
       convertProcess.on('close', (code) => {
         if (code === 0) {
-          console.log('✅ Conversion complete - triggering frontend update');
+          console.log('Conversion complete - triggering frontend update');
 
           // Read and broadcast updated coin data
           let coinData = [];
@@ -235,8 +440,8 @@ app.post('/api/scraper/stop', (_req, res) => {
           // Broadcast coin data update AFTER conversion succeeds
           broadcast({ type: 'coin_data_updated', coins: coinData.length, timestamp: new Date().toISOString() });
         } else {
-          console.error(`⚠️  Conversion script exited with code ${code}`);
-          broadcast({ type: 'scraper_log', message: `⚠️  Conversion script exited with code ${code}` , timestamp: new Date().toISOString() });
+          console.error(`WARNING: Conversion script exited with code ${code}`);
+          broadcast({ type: 'scraper_log', message: `WARNING: Conversion script exited with code ${code}` , timestamp: new Date().toISOString() });
         }
       });
     });
@@ -308,15 +513,15 @@ wss.on('connection', (ws) => {
 
 // Start server
 server.listen(PORT, () => {
-  console.log(`🚀 Backend server + WS running on http://localhost:${PORT}`);
-  console.log(`🔌 WebSocket endpoint: ws://localhost:${PORT}/ws`);
-  console.log(`👀 Watching scraped posts: ${scrapedPostsPath}`);
-  console.log(`📁 Coin data file: ${coinDataPath}`);
+  console.log(`Backend server + WS running on http://localhost:${PORT}`);
+  console.log(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
+  console.log(`Watching scraped posts: ${scrapedPostsPath}`);
+  console.log(`Coin data file: ${coinDataPath}`);
 });
 
 // Cleanup on exit
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down...');
+  console.log('\nShutting down...');
   if (scraperProcess) scraperProcess.kill('SIGTERM');
   watcher.close();
   server.close(() => process.exit(0));

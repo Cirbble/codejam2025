@@ -2,6 +2,26 @@ import json
 from textblob import TextBlob
 import math
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+# Try loading from project root (two levels up) first, then current directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '../../'))
+env_path = os.path.join(project_root, '.env')
+
+# Try multiple paths
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+elif os.path.exists('.env'):
+    load_dotenv('.env')
+else:
+    # Try one level up
+    parent_env = os.path.join(os.path.dirname(script_dir), '.env')
+    if os.path.exists(parent_env):
+        load_dotenv(parent_env)
+    else:
+        load_dotenv()  # Fallback - dotenv will search for .env
 
 def analyze_sentiment(text):
     """

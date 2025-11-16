@@ -6,7 +6,27 @@ from typing import Dict, Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# Try loading from project root (two levels up) first, then current directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '../../'))
+env_path = os.path.join(project_root, '.env')
+
+# Try multiple paths
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    print(f"Loaded .env from: {env_path}")
+elif os.path.exists('.env'):
+    load_dotenv('.env')
+    print(f"Loaded .env from current directory")
+else:
+    # Try one level up
+    parent_env = os.path.join(os.path.dirname(script_dir), '.env')
+    if os.path.exists(parent_env):
+        load_dotenv(parent_env)
+        print(f"Loaded .env from: {parent_env}")
+    else:
+        load_dotenv()  # Fallback - dotenv will search for .env
+        print(f"WARNING: Using default dotenv search")
 
 # Moralis API Configuration
 MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
@@ -392,7 +412,44 @@ def convert_sentiment_to_coin_data(input_file, output_file):
 
     # Process each coin group
     coin_data = []
-
+    
+    # First pass: Calculate all confidences to determine percentile thresholds
+    all_confidences = []
+    coin_confidences = {}
+    
+    for token_name, posts in coin_groups.items():
+        # Calculate averages
+        avg_raw_sentiment = sum(p.get('raw_sentiment_score', 0.0) for p in posts) / len(posts)
+        avg_aggregate_sentiment = sum(p.get('aggregate_sentiment_score', 0.0) for p in posts) / len(posts)
+        avg_engagement = sum(p.get('engagement_score', 0.0) for p in posts) / len(posts)
+        
+        # Calculate confidence
+        normalized_raw = (avg_raw_sentiment + 1) / 2
+        normalized_aggregate = (avg_aggregate_sentiment + 1) / 2
+        normalized_engagement = avg_engagement
+        
+        confidence = (normalized_raw * 0.3) + (normalized_aggregate * 0.5) + (normalized_engagement * 0.2)
+        confidence_percentage = round(confidence * 100)
+        
+        all_confidences.append(confidence_percentage)
+        coin_confidences[token_name] = confidence_percentage
+    
+    # Calculate percentile thresholds for better distribution
+    if len(all_confidences) > 0:
+        sorted_confidences = sorted(all_confidences)
+        # Use 33rd and 67th percentiles to ensure roughly equal distribution
+        p33_index = int(len(sorted_confidences) * 0.33)
+        p67_index = int(len(sorted_confidences) * 0.67)
+        sell_threshold = sorted_confidences[p33_index] if p33_index < len(sorted_confidences) else 50
+        buy_threshold = sorted_confidences[p67_index] if p67_index < len(sorted_confidences) else 70
+    else:
+        sell_threshold = 50
+        buy_threshold = 70
+    
+    print(f"\n=== Recommendation Thresholds (percentile-based) ===")
+    print(f"SELL threshold: < {sell_threshold}%")
+    print(f"HOLD threshold: {sell_threshold}% - {buy_threshold}%")
+    print(f"BUY threshold: > {buy_threshold}%")
     print("\n=== Fetching Token Metadata from Moralis ===")
 
     for token_name, posts in coin_groups.items():
@@ -444,14 +501,17 @@ def convert_sentiment_to_coin_data(input_file, output_file):
 
         confidence = (normalized_raw * 0.3) + (normalized_aggregate * 0.5) + (normalized_engagement * 0.2)
         confidence_percentage = round(confidence * 100)
+        
+        # Use pre-calculated confidence from first pass
+        confidence_percentage = coin_confidences.get(token_name, confidence_percentage)
 
-        # Determine recommendation based on confidence
-        if confidence_percentage >= 75:
+        # Determine recommendation based on percentile-based thresholds
+        if confidence_percentage > buy_threshold:
             recommendation = "BUY"
-        elif confidence_percentage >= 55:
-            recommendation = "HOLD"
-        else:
+        elif confidence_percentage < sell_threshold:
             recommendation = "SELL"
+        else:
+            recommendation = "HOLD"
 
         # Fetch token metadata from Moralis API
         token_metadata = get_token_metadata_with_retry(token_name)

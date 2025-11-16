@@ -71,11 +71,8 @@
         }
       </div>
 
-      <!-- Demo Button in Sidebar -->
+      <!-- Sidebar Footer -->
       <div class="sidebar-footer">
-        <button class="load-data-btn-small" (click)="loadExampleData()">
-          Load Demo Data
-        </button>
         <button class="load-data-btn-small refresh-btn" (click)="refreshPrices()">
           Refresh Prices
         </button>
@@ -84,12 +81,6 @@
 
     <!-- Main Content Area -->
     <main class="main-content">
-      <!-- Total Balance Section -->
-      <section class="balance-section">
-        <p class="balance-label">TOTAL BALANCE</p>
-        <h1 class="total-balance">${{ dataService.portfolio().totalBalance.toLocaleString() }}<span class="cents">.00</span></h1>
-      </section>
-
       <!-- Selected Coin Details or Overview -->
       @if (selectedCoinId && getSelectedCoin()) {
         <section class="selected-coin-view">

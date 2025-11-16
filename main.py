@@ -5,6 +5,37 @@ import time
 import os
 import subprocess
 import json
+import sys
+
+# Fix Windows console encoding for emojis
+def safe_print(*args, **kwargs):
+    """Print function that handles Unicode encoding errors on Windows."""
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        # If emoji encoding fails, try to print without emojis or use ASCII fallback
+        try:
+            # Try UTF-8 encoding
+            message = ' '.join(str(arg) for arg in args)
+            sys.stdout.buffer.write((message + '\n').encode('utf-8'))
+            sys.stdout.buffer.flush()
+        except:
+            # Last resort: remove emojis and print ASCII
+            message = ' '.join(str(arg) for arg in args)
+            # Remove common emoji Unicode ranges
+            import re
+            message = re.sub(r'[\U0001F300-\U0001F9FF]', '', message)  # Remove emojis
+            print(message, **kwargs)
+
+if sys.platform == 'win32':
+    try:
+        # Try to set UTF-8 encoding for stdout/stderr
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except:
+        # If that fails, replace print with safe_print
+        import builtins
+        builtins.print = safe_print
 
 # The 3 subreddits to scrape in parallel
 SUBREDDITS = ["altcoin", "CryptoMoonShots", "pumpfun"]
@@ -16,7 +47,7 @@ LEGACY_ROOT_FILE = os.path.join(SCRIPT_DIR, 'scraped_posts.json')
 if os.path.exists(LEGACY_ROOT_FILE):
     try:
         os.remove(LEGACY_ROOT_FILE)
-        print("🧹 Removed legacy root scraped_posts.json to avoid ambiguity")
+        print(" Removed legacy root scraped_posts.json to avoid ambiguity")
     except Exception:
         pass
 
@@ -42,16 +73,16 @@ def scrape_single_subreddit(subreddit: str):
     def timeout_handler():
         nonlocal timeout_occurred
         timeout_occurred = True
-        print(f"\n⏰ TIMEOUT: r/{subreddit} exceeded 3 minutes, stopping...")
+        print(f"\n TIMEOUT: r/{subreddit} exceeded 3 minutes, stopping...")
 
     # Set 3-minute timeout
     timeout_seconds = 180
     timer = threading.Timer(timeout_seconds, timeout_handler)
 
     try:
-        print(f"🚀 Starting Memecoin Sentiment Scraper for r/{subreddit}...")
-        print(f"📋 Monitoring 1 subreddit")
-        print(f"⏰ Timeout: 3 minutes (180 seconds)\n")
+        print(f" Starting Memecoin Sentiment Scraper for r/{subreddit}...")
+        print(f" Monitoring 1 subreddit")
+        print(f" Timeout: 3 minutes (180 seconds)\n")
 
         # Start timeout timer
         timer.start()
@@ -63,35 +94,35 @@ def scrape_single_subreddit(subreddit: str):
         scraper.subreddits = [subreddit]
 
         # Start a dedicated Browser Cash session for this thread with retry
-        print(f"🔑 Starting Browser Cash session for r/{subreddit}...")
+        print(f" Starting Browser Cash session for r/{subreddit}...")
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 scraper.client.start_session()
-                print(f"✅ Session started for r/{subreddit}: {scraper.client.session_id}")
+                print(f" Session started for r/{subreddit}: {scraper.client.session_id}")
                 break
             except Exception as e:
                 if attempt < max_retries - 1:
-                    print(f"⚠️  Session start failed (attempt {attempt + 1}/{max_retries}), retrying in 3s...")
+                    print(f"WARNING:  Session start failed (attempt {attempt + 1}/{max_retries}), retrying in 3s...")
                     time.sleep(3)
                 else:
                     raise Exception(f"Failed to start session after {max_retries} attempts: {e}")
 
         # Get CDP URL and connect Playwright
-        print(f"🔗 Getting CDP URL for r/{subreddit}...")
+        print(f" Getting CDP URL for r/{subreddit}...")
         cdp_url = scraper.client.get_cdp_url()
-        print(f"✅ CDP URL obtained for r/{subreddit}")
+        print(f" CDP URL obtained for r/{subreddit}")
 
-        print(f"🎭 Connecting Playwright for r/{subreddit}...")
+        print(f" Connecting Playwright for r/{subreddit}...")
         scraper.client.connect_playwright(cdp_url)
-        print(f"✅ Playwright connected for r/{subreddit}")
+        print(f" Playwright connected for r/{subreddit}")
 
         # Now scrape this single subreddit
-        print(f"📡 Starting to scrape r/{subreddit}...")
+        print(f" Starting to scrape r/{subreddit}...")
 
         # Check timeout before scraping
         if timeout_occurred:
-            print(f"⏰ Timeout occurred before scraping started for r/{subreddit}")
+            print(f" Timeout occurred before scraping started for r/{subreddit}")
             return
 
         posts = scraper.scrape_subreddit(
@@ -106,21 +137,21 @@ def scrape_single_subreddit(subreddit: str):
         timer.cancel()
 
         if timeout_occurred:
-            print(f"⏰ r/{subreddit} was stopped due to 3-minute timeout")
+            print(f" r/{subreddit} was stopped due to 3-minute timeout")
 
         # Ensure we have at least 5 posts with comments
         if len(posts) < 5:
-            print(f"⚠️  Only got {len(posts)} posts with comments from r/{subreddit}")
+            print(f"WARNING:  Only got {len(posts)} posts with comments from r/{subreddit}")
             print(f"    (This is okay, but ideally we want at least 5)")
         else:
-            print(f"✅ Got {len(posts)} posts with comments from r/{subreddit}")
+            print(f" Got {len(posts)} posts with comments from r/{subreddit}")
 
-        print(f"✅ Scraped {len(posts)} posts from r/{subreddit}")
+        print(f" Scraped {len(posts)} posts from r/{subreddit}")
 
         # Save to JSON (thread-safe)
         if posts:
             scraper._save_json_incremental(posts, output_file)
-            print(f"💾 Saved {len(posts)} posts from r/{subreddit} to {output_file}")
+            print(f" Saved {len(posts)} posts from r/{subreddit} to {output_file}")
 
         # Display summary
         print(f"\n" + "="*60)
@@ -129,19 +160,19 @@ def scrape_single_subreddit(subreddit: str):
 
         for i, post in enumerate(posts[:10], 1):  # Show first 10
             print(f"\n{i}. [{post.source}] {post.title}")
-            print(f"   ⬆️ {post.upvotes_likes} | 💬 {post.comment_count} | 👤 {post.author or 'unknown'}")
+            print(f"    {post.upvotes_likes} |  {post.comment_count} |  {post.author or 'unknown'}")
             if post.comments:
-                print(f"   💬 Comments: {len(post.comments)}")
+                print(f"    Comments: {len(post.comments)}")
 
         if len(posts) > 10:
             print(f"\n... and {len(posts) - 10} more posts")
 
-        print(f"\n📄 Scraping complete for r/{subreddit}")
+        print(f"\n Scraping complete for r/{subreddit}")
 
         # Mark this thread as complete
         with completed_lock:
             completed_count += 1
-            print(f"✅ {completed_count}/{len(SUBREDDITS)} subreddits completed")
+            print(f" {completed_count}/{len(SUBREDDITS)} subreddits completed")
 
             # If all threads are done, trigger processing
             if completed_count == len(SUBREDDITS):
@@ -149,12 +180,12 @@ def scrape_single_subreddit(subreddit: str):
 
     except KeyboardInterrupt:
         timer.cancel()
-        print(f"\n\n⚠️ Interrupted by user for r/{subreddit}. Exiting...")
+        print(f"\n\nWARNING: Interrupted by user for r/{subreddit}. Exiting...")
         import sys
         sys.exit(0)
     except Exception as e:
         timer.cancel()
-        print(f"\n❌ Fatal error for r/{subreddit}: {e}")
+        print(f"\nERROR: Fatal error for r/{subreddit}: {e}")
         import traceback
         traceback.print_exc()
     finally:
@@ -164,11 +195,11 @@ def scrape_single_subreddit(subreddit: str):
         # Always clean up the session
         if scraper and scraper.client.session_id:
             try:
-                print(f"🧹 Stopping Browser Cash session for r/{subreddit}...")
+                print(f" Stopping Browser Cash session for r/{subreddit}...")
                 scraper.client.stop_session()
-                print(f"✅ Session stopped for r/{subreddit}")
+                print(f" Session stopped for r/{subreddit}")
             except Exception as cleanup_error:
-                print(f"⚠️ Error stopping session for r/{subreddit}: {cleanup_error}")
+                print(f"WARNING: Error stopping session for r/{subreddit}: {cleanup_error}")
 
 
 def main():
@@ -178,11 +209,11 @@ def main():
     scraping_complete.clear()
 
     print("\n" + "="*70)
-    print("🚀 HELLCOIN'ED - MEMECOIN SENTIMENT SCRAPER")
+    print(" HELLCOIN'ED - MEMECOIN SENTIMENT SCRAPER")
     print("="*70)
-    print(f"📋 Scraping: r/{SUBREDDITS[0]}, r/{SUBREDDITS[1]}, r/{SUBREDDITS[2]}")
-    print(f"📁 Output: {OUTPUT_FILE}")
-    print(f"⏰ Filter: Posts from last 14 days only")
+    print(f" Scraping: r/{SUBREDDITS[0]}, r/{SUBREDDITS[1]}, r/{SUBREDDITS[2]}")
+    print(f" Output: {OUTPUT_FILE}")
+    print(f" Filter: Posts from last 14 days only")
     print("="*70 + "\n")
 
     threads = []
@@ -202,7 +233,7 @@ def main():
         thread.join()
 
     print("\n" + "="*70)
-    print("✅ ALL SCRAPERS COMPLETED!")
+    print(" ALL SCRAPERS COMPLETED!")
     print("="*70)
 
     # Wait for completion flag
@@ -210,7 +241,7 @@ def main():
 
     # Automatically process the data
     print("\n" + "="*70)
-    print("🔄 AUTO-PROCESSING SCRAPED DATA")
+    print(" AUTO-PROCESSING SCRAPED DATA")
     print("="*70)
 
     try:
@@ -219,7 +250,7 @@ def main():
             with open(OUTPUT_FILE, 'r') as f:
                 posts = json.load(f)
                 unique_tokens = set(p.get('token_name') for p in posts if p.get('token_name'))
-                print(f"\n📊 Scraping Results:")
+                print(f"\n Scraping Results:")
                 print(f"   • Total posts: {len(posts)}")
                 print(f"   • Unique tokens: {len(unique_tokens)}")
                 if unique_tokens:
@@ -229,7 +260,7 @@ def main():
 
         # Step 1: Run sentiment analysis
         print("\n" + "-"*70)
-        print("1️⃣  Running sentiment analysis...")
+        print("1.  Running sentiment analysis...")
         print("-"*70)
         sentiment_script = os.path.join(OUTPUT_DIR, "sentiment.py")
 
@@ -241,21 +272,21 @@ def main():
         )
 
         if result.returncode == 0:
-            print("   ✅ Sentiment analysis complete")
+            print("    Sentiment analysis complete")
             # Show summary from output
             output_lines = result.stdout.strip().split('\n')
             for line in output_lines[-8:]:
                 if line.strip():
                     print(f"   {line}")
         else:
-            print(f"   ⚠️ Sentiment analysis completed with warnings")
+            print(f"   WARNING: Sentiment analysis completed with warnings")
             if result.stderr:
                 for line in result.stderr.strip().split('\n')[-5:]:
                     print(f"   {line}")
 
         # Step 2: Convert to coin-data.json
         print("\n" + "-"*70)
-        print("2️⃣  Converting to coin-data.json with Moralis API...")
+        print("2.  Converting to coin-data.json with Moralis API...")
         print("-"*70)
         convert_script = os.path.join(OUTPUT_DIR, "convert_to_coin_data.py")
 
@@ -267,7 +298,7 @@ def main():
         )
 
         if result.returncode == 0:
-            print("   ✅ Conversion complete")
+            print("    Conversion complete")
             # Show summary
             output_lines = result.stdout.strip().split('\n')
             # Show last 15 lines which include the summary
@@ -275,7 +306,7 @@ def main():
                 if line.strip():
                     print(f"   {line}")
         else:
-            print(f"   ⚠️ Conversion completed with warnings")
+            print(f"   WARNING: Conversion completed with warnings")
             if result.stderr:
                 for line in result.stderr.strip().split('\n')[-5:]:
                     print(f"   {line}")
@@ -297,7 +328,7 @@ def main():
         print("="*70)
         print("\n🌐 Your dashboard is now live with fresh data at:")
         print("   http://localhost:4200")
-        print("\n💡 Check the dashboard to see:")
+        print("\n Check the dashboard to see:")
         print("   • Real-time prices from Moralis/DexScreener")
         print("   • Coin logos from Jupiter/Moralis")
         print("   • Sentiment analysis scores")
@@ -306,7 +337,7 @@ def main():
         print("\n" + "="*70 + "\n")
 
     except Exception as e:
-        print(f"\n❌ Error during auto-processing: {e}")
+        print(f"\nERROR: Error during auto-processing: {e}")
         import traceback
         traceback.print_exc()
         print("\nYou can manually run:")

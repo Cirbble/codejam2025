@@ -61,6 +61,14 @@
             [style.background]="getConfidenceColor()"
           ></div>
         </div>
+        @if (coin.recommendation) {
+          <div class="recommendation-badge"
+               [class.buy]="coin.recommendation === 'BUY'"
+               [class.hold]="coin.recommendation === 'HOLD'"
+               [class.sell]="coin.recommendation === 'SELL'">
+            {{ coin.recommendation }}
+          </div>
+        }
       </div>
     </div>
   }

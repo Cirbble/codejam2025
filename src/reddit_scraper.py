@@ -86,7 +86,7 @@ class RedditScraper:
 
         # Refresh page on first visit to bypass bot detection
         if refresh_on_first:
-            print(f"  🔄 Refreshing page to bypass bot detection...")
+            print(f"  Refreshing page to bypass bot detection...")
             self.client.navigate(url, wait_time=2)
             time.sleep(1)
 
@@ -174,10 +174,10 @@ class RedditScraper:
                 # No image analysis here; only token identification
                 if (post.title or post.content) and not post.token_name:
                     self._start_token_identification_async(post)
-            print(f"📊 Scraped {len(posts)} posts")
+            print(f"Scraped {len(posts)} posts")
             return posts
         except Exception as e:
-            print(f"❌ Error scraping posts: {e}")
+            print(f"ERROR: Error scraping posts: {e}")
             return []
 
     # ----------------- token detection -----------------
@@ -218,56 +218,134 @@ class RedditScraper:
 
     # ----------------- comments -----------------
     def scrape_comments(self, post_url: str, limit: int = 50) -> List[str]:
+        """Scrape comments from a post.
+        
+        Args:
+            post_url: URL of the post
+            limit: Maximum number of comments to scrape
+            
+        Returns:
+            List of comment texts
+        """
         try:
-            self.client.navigate(post_url, wait_time=3)  # Reduced from 5 to 3
-            time.sleep(2)  # Reduced from 4 to 2
-            has_comments = _js_result(
-                self.client.execute_script(
-                    "return document.querySelectorAll('shreddit-comment').length;", retries=2
-                ),
-                0,
-            )
-            if isinstance(has_comments, dict):
-                has_comments = has_comments.get("result", 0)
-            # Scroll to load more comments - reduced iterations
-            for i in range(6):  # Reduced from 12 to 6 (~5 seconds total)
+            self.client.navigate(post_url, wait_time=3)
+            
+            # Poll for comments: wait 1s, check, repeat until comments found or longer timeout
+            # If we know the post has comments (comment_count >= 1), wait longer
+            max_wait_time = 10  # Increased from 7 to 10 seconds for better reliability
+            check_interval = 1  # Check every 1 second
+            waited_so_far = 0
+            comments_found = False
+            
+            while waited_so_far < max_wait_time and not comments_found:
+                print(f"   Waiting {check_interval}s for comments to load... (total: {waited_so_far + check_interval}s)")
+                time.sleep(check_interval)
+                waited_so_far += check_interval
+                
+                # Check if comments are present
+                try:
+                    check_script = """
+                    (function() {
+                        const commentElements = document.querySelectorAll('shreddit-comment');
+                        return commentElements.length > 0;
+                    })();
+                    """
+                    result = self.client.execute_script(check_script, retries=1)
+                    has_comments = result if isinstance(result, bool) else result.get("result", False) if isinstance(result, dict) else False
+                    
+                    if has_comments:
+                        print(f"   Comments found after {waited_so_far}s")
+                        comments_found = True
+                        break
+                except Exception:
+                    # If check fails, continue waiting
+                    pass
+            
+            if not comments_found:
+                print(f"  WARNING: No comments found after {waited_so_far}s, proceeding anyway...")
+            
+            # Scroll to load more comments
+            for i in range(6):  # Scroll 6 times to load more comments
                 self.client.execute_script(
                     "window.scrollBy(0, 1000); return true;", retries=1
                 )
                 time.sleep(0.7)
-            # Extract comments
+            
+            # Extract comments with improved selectors
+            # Playwright's page.evaluate() wraps code in a function, so we need to return the value
+            # Using function expression syntax that Playwright can handle
             extract = f"""
             (function() {{
-                const out = [];
-                const els = document.querySelectorAll('shreddit-comment');
-                for (let i = 0; i < Math.min({limit}, els.length); i++) {{
-                    const c = els[i];
-                    let t = '';
-                    const sels = [
-                        'shreddit-comment-body', '[slot="comment-body"]', '[slot="comment"]',
-                        '[id*="-comment-rtjson-content"]', 'faceplate-tracker[slot="comment-body"]',
-                        '.md', 'p', 'div[data-testid="comment"]', 'article',
-                        'div[class*="comment"]', 'div[class*="Comment"]'
+                const comments = [];
+                const commentElements = document.querySelectorAll('shreddit-comment');
+                console.log('Found ' + commentElements.length + ' comment elements');
+                
+                for (let i = 0; i < Math.min({limit}, commentElements.length); i++) {{
+                    const comment = commentElements[i];
+                    let text = '';
+                    
+                    const selectors = [
+                        'shreddit-comment-body',
+                        '[slot="comment-body"]',
+                        '[slot="comment"]',
+                        '[id*="-comment-rtjson-content"]',
+                        'faceplate-tracker[slot="comment-body"]',
+                        '.md',
+                        'p',
+                        'div[data-testid="comment"]',
+                        'article',
+                        'div[class*="comment"]',
+                        'div[class*="Comment"]'
                     ];
-                    for (const s of sels) {{
-                        const n = c.querySelector(s);
-                        if (n) {{ t = n.textContent.trim(); if (t && t.length > 10) break; }}
+                    
+                    for (const selector of selectors) {{
+                        const content = comment.querySelector(selector);
+                        if (content) {{
+                            text = content.textContent.trim();
+                            text = text.replace(/reply|share|report|give award|permalink|embed|save|parent|context|level \\d+/gi, '').trim();
+                            if (text && text.length > 10) {{
+                                break;
+                            }}
+                        }}
                     }}
-                    if (!t || t.length <= 10) {{
-                        t = c.textContent.trim();
-                        t = t.replace(/reply|share|report|give award|permalink|embed|save|parent|context|level \d+|\d+ (points|point)|\d+ (minutes|hours|days|weeks|months|years) ago/gi, '');
-                        t = t.replace(/\n\s*\n/g, ' ').replace(/\s+/g, ' ').trim();
+                    
+                    if (!text || text.length <= 10) {{
+                        text = comment.textContent.trim();
+                        text = text.replace(/reply|share|report|give award|permalink|embed|save|parent|context|level \\d+|\\d+ (points|point)|\\d+ (minutes|hours|days|weeks|months|years) ago/gi, '');
+                        text = text.replace(/\\n\\s*\\n/g, ' ').replace(/\\s+/g, ' ').trim();
                     }}
-                    if (t && t.length > 10 && !t.match(/^(reply|share|report|permalink|embed|save)$/i)) out.push(t);
+                    
+                    if (text && text.length > 10 && !text.match(/^(reply|share|report|permalink|embed|save)$/i)) {{
+                        comments.push(text);
+                    }}
                 }}
-                return out;
-            }})();
+                
+                console.log('Extracted ' + comments.length + ' comments');
+                return comments;
+            }})()
             """
-            res = self.client.execute_script(extract, retries=2)
-            comments = _js_result(res, [])
-            return comments[:limit] if isinstance(comments, list) else []
+            
+            # execute_script now has retry logic for execution context errors
+            result = self.client.execute_script(extract, retries=2)
+            comments = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
+            
+            if not comments:
+                # Check how many comment elements exist on the page
+                check_count_script = "document.querySelectorAll('shreddit-comment').length;"
+                count_result = self.client.execute_script(check_count_script, retries=1)
+                element_count = count_result if isinstance(count_result, int) else count_result.get("result", 0) if isinstance(count_result, dict) else 0
+                print(f"  WARNING: No comments extracted despite {element_count} comment elements found on page")
+            
+            if comments:
+                print(f"   Extracted {len(comments)} comments")
+            
+            return comments[:limit] if comments else []
         except Exception as e:
-            print(f"⚠️ Error scraping comments: {e}")
+            error_msg = str(e)
+            if "Execution context was destroyed" in error_msg:
+                print(f"WARNING: Error scraping comments: Page navigated during execution. Skipping comments for this post.")
+            else:
+                print(f"WARNING: Error scraping comments: {e}")
             return []
 
     # ----------------- persistence -----------------
@@ -300,7 +378,7 @@ class RedditScraper:
                 with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"  ⚠️ Failed to update JSON for post {post.id}: {e}")
+            print(f"  WARNING: Failed to update JSON for post {post.id}: {e}")
 
     def _save_json_incremental(self, posts: List[Post], output_file: str) -> None:
         try:
@@ -339,7 +417,7 @@ class RedditScraper:
                     json.dump(out, f, indent=2, ensure_ascii=False)
                 print(f"  💾 Saved {len(out)} total posts to {output_file}")
         except Exception as e:
-            print(f"⚠️ Error saving JSON: {e}")
+            print(f"WARNING: Error saving JSON: {e}")
 
     def to_json(self, posts: List[Post], output_file: str = "scrapper_and_analysis/scraped_posts.json") -> str:
         # Ensure we use the coin-ed/scrapper_and_analysis folder
@@ -418,7 +496,7 @@ class RedditScraper:
             # Check timeout
             elapsed = time.time() - start_time
             if elapsed >= max_duration_seconds:
-                print(f"  ⏱️ Time limit reached ({elapsed:.1f}s), stopping scrape for r/{subreddit}")
+                print(f"   Time limit reached ({elapsed:.1f}s), stopping scrape for r/{subreddit}")
                 break
 
             print(f"  📄 Scraping page {page_num}... (elapsed: {elapsed:.1f}s)")
@@ -433,7 +511,7 @@ class RedditScraper:
             for post in page_posts:
                 # Check timeout again
                 if time.time() - start_time >= max_duration_seconds:
-                    print(f"  ⏱️ Time limit reached during post processing")
+                    print(f"   Time limit reached during post processing")
                     break
 
                 if post.link and post.link in seen_links:
@@ -449,43 +527,51 @@ class RedditScraper:
                     continue
 
                 if scrape_comments and post.link:
-                    print(f"  📝 Scraping comments for post {post.id}...")
+                    # Always scrape comments if post has a link
+                    # If comment_count >= 1, we know there are comments, so wait longer
+                    has_comments_indicator = post.comment_count >= 1
+                    if has_comments_indicator:
+                        print(f"   Scraping comments for post {post.id} (has {post.comment_count} comments, will wait longer)...")
+                    else:
+                        print(f"   Scraping comments for post {post.id}...")
+                    
                     comments = self.scrape_comments(post.link, limit=50)
 
-                    if comments:
-                        post.comments = comments
-                        post.comment_count = len(comments)
+                    # Always save the post, even if no comments found
+                    post.comments = comments if comments else []
+                    post.comment_count = len(comments) if comments else 0
+                    seen_links.add(post.link)
+                    all_posts.append(post)
+                    new_posts_this_page += 1
+                    self._update_post_in_json(post)
+                    
+                    # Log if we expected comments but didn't get them
+                    if has_comments_indicator and not comments:
+                        print(f"  WARNING: Post {post.id} had {post.comment_count} comments indicated but none were extracted")
+
+                    # Retry token identification with comments if we didn't find token before
+                    if not post.token_name and (post.title or post.content):
+                        self._start_token_identification_async(post)
+
+                    # Navigate back to listing after scraping comments
+                    # This is needed because we navigated to the post detail page
+                    try:
+                        listing_url = f"https://www.reddit.com/r/{subreddit}/new/"
+                        print(f"    Returning to listing...")
+                        self.client.navigate(listing_url, wait_time=1)
+                        time.sleep(0.5)
+                    except Exception as e:
+                        print(f"  WARNING: Error navigating back: {e}")
+                else:
+                    # Post has no link or comments disabled, still add it
+                    if post.link:
                         seen_links.add(post.link)
-                        all_posts.append(post)
-                        new_posts_this_page += 1
-                        self._update_post_in_json(post)
-
-                        if not post.token_name and (post.title or post.content):
-                            self._start_token_identification_async(post)
-
-                        # Navigate back to listing after scraping comments
-                        # This is needed because we navigated to the post detail page
-                        try:
-                            listing_url = f"https://www.reddit.com/r/{subreddit}/new/"
-                            print(f"  ↩️  Returning to listing...")
-                            self.client.navigate(listing_url, wait_time=1)
-                            time.sleep(0.5)
-                        except Exception as e:
-                            print(f"  ⚠️ Error navigating back: {e}")
-                    else:
-                        consecutive_skips += 1
-                        if consecutive_skips >= skip_threshold:
-                            break
-                        # Navigate back even if no comments found
-                        try:
-                            listing_url = f"https://www.reddit.com/r/{subreddit}/new/"
-                            self.client.navigate(listing_url, wait_time=1)
-                            time.sleep(0.5)
-                        except Exception:
-                            pass
+                    all_posts.append(post)
+                    new_posts_this_page += 1
+                    self._update_post_in_json(post)
 
             if len(all_posts) >= min_posts_required:
-                print(f"  ✅ Reached minimum {min_posts_required} posts")
+                print(f"   Reached minimum {min_posts_required} posts")
                 break
 
             if new_posts_this_page == 0:
@@ -507,7 +593,7 @@ class RedditScraper:
                 page_num += 1
 
         elapsed_total = time.time() - start_time
-        print(f"  ✅ Scraped {len(all_posts)} posts from r/{subreddit} in {elapsed_total:.1f}s")
+        print(f"   Scraped {len(all_posts)} posts from r/{subreddit} in {elapsed_total:.1f}s")
 
         if take_screenshots:
             for p in all_posts:
@@ -539,7 +625,7 @@ class RedditScraper:
                 remaining = max_total_duration - elapsed
 
                 if remaining <= 10:  # Need at least 10s to scrape
-                    print(f"\n⏱️ Global timeout approaching ({elapsed:.1f}s elapsed), stopping")
+                    print(f"\n Global timeout approaching ({elapsed:.1f}s elapsed), stopping")
                     break
 
                 try:
@@ -558,28 +644,28 @@ class RedditScraper:
                     self._save_json_incremental(all_posts, output_file)
                     time.sleep(1)
                 except Exception as e:
-                    print(f"❌ Error scraping r/{subreddit}: {e}")
+                    print(f"ERROR: Error scraping r/{subreddit}: {e}")
                     continue
 
             total_elapsed = time.time() - start_time
-            print(f"\n✅ Total posts scraped: {len(all_posts)} in {total_elapsed:.1f}s")
+            print(f"\n Total posts scraped: {len(all_posts)} in {total_elapsed:.1f}s")
 
             # Final save
             self._save_json_incremental(all_posts, output_file)
 
             # Trigger frontend update after scraping
-            print("\n🔄 Triggering frontend update...")
+            print("\n Triggering frontend update...")
             self._trigger_frontend_update()
 
         except Exception as e:
-            print(f"❌ Error in scrape_all_subreddits: {e}")
+            print(f"ERROR: Error in scrape_all_subreddits: {e}")
         finally:
             try:
                 if self.client.session_id:
                     self.client.stop_session()
-                    print("✅ Browser session closed")
+                    print(" Browser session closed")
             except Exception as e:
-                print(f"⚠️ Error closing session: {e}")
+                print(f"WARNING: Error closing session: {e}")
         return all_posts
 
     def _trigger_frontend_update(self) -> None:
@@ -589,7 +675,7 @@ class RedditScraper:
             import sys
 
             # Run sentiment analysis
-            print("  📊 Running sentiment analysis...")
+            print("   Running sentiment analysis...")
             sentiment_script = os.path.join(os.getcwd(), "scrapper_and_analysis", "sentiment.py")
             if os.path.exists(sentiment_script):
                 result = subprocess.run(
@@ -599,14 +685,14 @@ class RedditScraper:
                     timeout=30,
                 )
                 if result.returncode == 0:
-                    print("  ✅ Sentiment analysis complete")
+                    print("   Sentiment analysis complete")
                 else:
-                    print(f"  ⚠️ Sentiment analysis failed: {result.stderr}")
+                    print(f"  WARNING: Sentiment analysis failed: {result.stderr}")
             else:
-                print(f"  ⚠️ Sentiment script not found at {sentiment_script}")
+                print(f"  WARNING: Sentiment script not found at {sentiment_script}")
 
             # Run convert script to update coin-data.json
-            print("  🔄 Converting data for frontend...")
+            print("   Converting data for frontend...")
             convert_script = os.path.join(os.getcwd(), "scrapper_and_analysis", "convert_to_coin_data.py")
             if os.path.exists(convert_script):
                 result = subprocess.run(
@@ -616,18 +702,18 @@ class RedditScraper:
                     timeout=30,
                 )
                 if result.returncode == 0:
-                    print("  ✅ Frontend data updated")
+                    print("   Frontend data updated")
                 else:
-                    print(f"  ⚠️ Convert script failed: {result.stderr}")
+                    print(f"  WARNING: Convert script failed: {result.stderr}")
             else:
-                print(f"  ⚠️ Convert script not found at {convert_script}")
+                print(f"  WARNING: Convert script not found at {convert_script}")
 
         except Exception as e:
-            print(f"  ⚠️ Error triggering frontend update: {e}")
+            print(f"  WARNING: Error triggering frontend update: {e}")
 
 
 def main() -> None:
-    print("🚀 Starting Reddit Memecoin Scraper...")
+    print(" Starting Reddit Memecoin Scraper...")
     print(f"📋 Monitoring {len(MEMECOIN_SUBREDDITS)} subreddits\n")
     scraper = RedditScraper()
     posts = scraper.scrape_all_subreddits(limit_per_subreddit=10, scrape_comments=True, take_screenshots=False)

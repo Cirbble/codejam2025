@@ -273,18 +273,40 @@ class BrowserCashClient:
         if not PLAYWRIGHT_AVAILABLE:
             raise ImportError("Playwright is not installed. Run: pip install playwright && playwright install chromium")
         
+        # Close existing browser connection if it exists and is closed
+        if self.browser:
+            try:
+                if not self.browser.is_connected():
+                    self.browser = None
+                    self.page = None
+            except:
+                # Browser might be in invalid state, clear it
+                self.browser = None
+                self.page = None
+        
         if not self.playwright:
             self.playwright = sync_playwright().start()
         
         # Connect to existing browser via CDP (browser is already running on Browser Cash servers)
         # The browser should be running in headful mode by default on Browser Cash
-        self.browser = self.playwright.chromium.connect_over_cdp(cdp_url)
-        contexts = self.browser.contexts
-        if contexts:
-            self.page = contexts[0].pages[0] if contexts[0].pages else None
-        
-        if not self.page:
-            self.page = self.browser.new_page()
+        try:
+            self.browser = self.playwright.chromium.connect_over_cdp(cdp_url)
+            contexts = self.browser.contexts
+            if contexts and contexts[0].pages:
+                self.page = contexts[0].pages[0]
+            else:
+                # Create a new page if none exists
+                if contexts:
+                    self.page = contexts[0].new_page()
+                else:
+                    # Create a new context and page
+                    context = self.browser.new_context()
+                    self.page = context.new_page()
+        except Exception as e:
+            error_msg = str(e)
+            if "Target closed" in error_msg or "Target page" in error_msg or "context" in error_msg.lower():
+                raise Exception(f"Browser session was closed or invalid. Please restart the session. Error: {e}")
+            raise
         
         return self.page
     
@@ -292,8 +314,15 @@ class BrowserCashClient:
         """Ensure Playwright is connected to the browser session.
         Automatically gets CDP URL and connects if not already connected.
         """
+        # Check if page exists and is still valid
         if self.page:
-            return  # Already connected
+            try:
+                if not self.page.is_closed():
+                    return  # Already connected and valid
+            except:
+                # Page might be in invalid state, reconnect
+                self.page = None
+                self.browser = None
         
         if not self.cdp_url:
             self.cdp_url = self.get_cdp_url()
@@ -310,9 +339,34 @@ class BrowserCashClient:
         """
         self.ensure_playwright_connected()
         
+        # Check if page is still valid before navigating
+        if not self.page or self.page.is_closed():
+            print(f"⚠️ Page was closed, reconnecting...")
+            self.ensure_playwright_connected()
+        
         print(f"🌐 Navigating to: {url}")
-        self.page.goto(url, wait_until="domcontentloaded")
-        time.sleep(wait_time)
+        try:
+            # Use shorter timeout (8 seconds) to fail fast if page is stuck
+            self.page.goto(url, wait_until="domcontentloaded", timeout=8000)
+            time.sleep(wait_time)
+        except Exception as e:
+            error_msg = str(e)
+            if "Target closed" in error_msg or "Target page" in error_msg or "context" in error_msg.lower():
+                print(f"⚠️ Browser context closed during navigation, reconnecting...")
+                # Try to reconnect
+                try:
+                    if self.cdp_url:
+                        self.connect_playwright(self.cdp_url)
+                        # Retry navigation once
+                        self.page.goto(url, wait_until="domcontentloaded", timeout=8000)
+                        time.sleep(wait_time)
+                    else:
+                        raise Exception("Cannot reconnect: no CDP URL available")
+                except Exception as retry_error:
+                    print(f"❌ Failed to reconnect: {retry_error}")
+                    raise Exception(f"Browser session was closed. Original error: {e}")
+            else:
+                raise
     
     def execute_script(self, script: str, retries: int = 2) -> Any:
         """Execute JavaScript in the browser session using Playwright.
@@ -327,20 +381,35 @@ class BrowserCashClient:
         """
         self.ensure_playwright_connected()
         
+        # Check if page is still valid before executing
+        if not self.page or self.page.is_closed():
+            print(f"⚠️ Page was closed, reconnecting...")
+            self.ensure_playwright_connected()
+        
         for attempt in range(retries + 1):
             try:
+                # Check page validity again before each attempt
+                if self.page.is_closed():
+                    raise Exception("Page is closed")
                 return self.page.evaluate(script)
             except Exception as e:
                 error_msg = str(e)
                 # Check if it's an execution context error (page navigated during execution)
-                if "Execution context was destroyed" in error_msg or "Target closed" in error_msg:
+                if "Execution context was destroyed" in error_msg or "Target closed" in error_msg or "Page is closed" in error_msg or "Target page" in error_msg:
                     if attempt < retries:
                         print(f"⚠️ Execution context destroyed (attempt {attempt + 1}/{retries + 1}), retrying...")
                         # Wait a bit for page to stabilize
                         import time
                         time.sleep(1)
                         # Re-ensure connection
-                        self.ensure_playwright_connected()
+                        try:
+                            if self.cdp_url:
+                                self.connect_playwright(self.cdp_url)
+                            else:
+                                raise Exception("Cannot reconnect: no CDP URL available")
+                        except Exception as reconnect_error:
+                            print(f"❌ Failed to reconnect: {reconnect_error}")
+                            raise Exception(f"Browser session was closed. Original error: {e}")
                         continue
                     else:
                         print(f"⚠️ Execution context destroyed after {retries + 1} attempts - page may have navigated")

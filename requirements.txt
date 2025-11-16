@@ -5,4 +5,5 @@ playwright>=1.40.0
 solana>=0.30.0
 solders>=0.18.0
 base58>=2.1.0
+textblob>=0.17.1
 

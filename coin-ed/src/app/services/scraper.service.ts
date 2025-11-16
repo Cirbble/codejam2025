@@ -73,7 +73,7 @@ export class ScraperService {
         this.connectedSubject.next(true);
         this.reconnectDelay = 2000; // reset
         console.log('[WebSocket] Connected successfully');
-        this.addLog('✅ Connected to scraper backend');
+        this.addLog('Connected to scraper backend');
       };
 
       this.ws.onmessage = (event) => {
@@ -138,9 +138,17 @@ export class ScraperService {
         }
         break;
       case 'coin_data_updated':
-        this.addLog(`✅ Coin data updated (${update.coins || 0} coins)`);
-        // Notify data service via a custom event for reload
-        window.dispatchEvent(new CustomEvent('coin-data-updated'));
+        const coinCount = update.coins || 0;
+        if (coinCount === 0) {
+          this.addLog(`Coin data cleared (0 coins)`);
+          // Only clear coins when explicitly told to (0 coins)
+          // Dispatch a special event to clear coins
+          window.dispatchEvent(new CustomEvent('coin-data-cleared'));
+        } else {
+          this.addLog(`Coin data updated (${coinCount} coins)`);
+          // Notify data service via a custom event for reload
+          window.dispatchEvent(new CustomEvent('coin-data-updated'));
+        }
         break;
       case 'scraper_stopped':
         this.scraperStatusSubject.next({ running: false, pid: null });

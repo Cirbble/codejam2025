@@ -35,6 +35,12 @@ export class CoinCardComponent {
   }
 
   calculateConfidence(): number {
+    // Use backend confidence if available (it's 0-100, convert to 0-1)
+    if (this.coin.confidence !== undefined && this.coin.confidence !== null) {
+      return this.coin.confidence / 100;
+    }
+    
+    // Fallback: calculate from sentiment scores if confidence not available
     if (!this.coin.hype && !this.coin.communityHype && !this.coin.popularity) {
       return 0;
     }
@@ -42,14 +48,21 @@ export class CoinCardComponent {
     const community = this.coin.communityHype || 0;
     const popularity = this.coin.popularity || 0;
 
-    // Weighted average: 30% hype, 40% community, 30% popularity
-    return (hype * 0.3 + community * 0.4 + popularity * 0.3);
+    // Weighted average: 30% hype, 50% community, 20% popularity (matching backend)
+    return (hype * 0.3 + community * 0.5 + popularity * 0.2);
   }
 
   getConfidenceColor(): string {
     const confidence = this.calculateConfidence();
-    if (confidence >= 0.7) return '#00d4aa'; // Green
-    if (confidence >= 0.4) return '#6B8AFF'; // Blue
+    // Use recommendation if available, otherwise use confidence thresholds
+    if (this.coin.recommendation) {
+      if (this.coin.recommendation === 'BUY') return '#00d4aa'; // Green
+      if (this.coin.recommendation === 'HOLD') return '#fbbf24'; // Orange/Yellow
+      if (this.coin.recommendation === 'SELL') return '#ff6b6b'; // Red
+    }
+    // Fallback to confidence-based colors
+    if (confidence >= 0.6) return '#00d4aa'; // Green
+    if (confidence >= 0.4) return '#fbbf24'; // Orange/Yellow
     return '#ff6b6b'; // Red
   }
 
