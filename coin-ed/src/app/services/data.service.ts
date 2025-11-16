@@ -155,9 +155,16 @@ export class DataService {
    */
   private async loadCoinData(): Promise<void> {
     try {
-      const response = await fetch('/coin-data.json');
+      // Use relative path that works in both browser and SSR
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200';
+      const response = await fetch(`${baseUrl}/coin-data.json`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load coin data: ${response.status} ${response.statusText}`);
+      }
+
       const coinDataArray = await response.json();
-      
+
       const coins: Coin[] = coinDataArray.map((item: any) => ({
         id: item.id,
         name: item.name,
@@ -228,19 +235,19 @@ export class DataService {
    */
   fetchPumpPortalPrice(coinSymbol: string): void {
     const tokenAddress = getTokenAddress(coinSymbol);
-    
+
     if (!tokenAddress) {
       console.log(`No token address configured for ${coinSymbol}`);
       return;
     }
 
     console.log(`Fetching price for ${coinSymbol} from PumpPortal...`);
-    
+
     this.pumpPortal.getTokenInfo(tokenAddress).subscribe(tokenInfo => {
       if (tokenInfo) {
         const priceInSOL = this.pumpPortal.calculatePrice(tokenInfo);
         const priceInUSD = tokenInfo.usd_market_cap / tokenInfo.total_supply;
-        
+
         console.log(`${coinSymbol} Price:`, {
           priceInSOL,
           priceInUSD,
@@ -251,7 +258,7 @@ export class DataService {
         // Update the coin with real price data
         const coins = this.coins();
         const coinIndex = coins.findIndex(c => c.symbol === coinSymbol);
-        
+
         if (coinIndex >= 0) {
           const updatedCoins = [...coins];
           updatedCoins[coinIndex] = {
