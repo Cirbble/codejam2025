@@ -7,46 +7,39 @@
       </div>
 
       <div class="modal-body">
-        <p class="instruction">Select an action for the {{ agentType() === 'buyer' ? 'AI Buyer' : 'AI Seller' }} agent:</p>
-        
-        <div class="action-buttons">
-          <button 
-            class="action-btn buy-btn" 
-            [class.selected]="selectedAction() === 'buy'"
-            (click)="selectAction('buy')">
-            <span class="icon">📈</span>
-            <span class="label">Buy</span>
-          </button>
+        @if (!showSuccess()) {
+          <p class="instruction">{{ agentType() === 'buyer' ? 'AI Buyer' : 'AI Seller' }} agent will execute a {{ agentType() === 'buyer' ? 'buy' : 'sell' }} order:</p>
           
-          <button 
-            class="action-btn sell-btn" 
-            [class.selected]="selectedAction() === 'sell'"
-            (click)="selectAction('sell')">
-            <span class="icon">📉</span>
-            <span class="label">Sell</span>
-          </button>
-        </div>
+          @if (generatedMessage()) {
+            <div class="message-container">
+              <div class="message-header">
+                <span class="message-icon">🤖</span>
+                <span class="message-title">Agent Message</span>
+              </div>
+              <div class="message-content">
+                {{ generatedMessage() }}
+              </div>
+            </div>
+          }
+        }
 
-        @if (generatedMessage()) {
-          <div class="message-container">
-            <div class="message-header">
-              <span class="message-icon">🤖</span>
-              <span class="message-title">Agent Message</span>
-            </div>
-            <div class="message-content">
-              {{ generatedMessage() }}
-            </div>
+        @if (showSuccess()) {
+          <div class="success-container">
+            <div class="success-icon">✅</div>
+            <div class="success-message">{{ successMessage() }}</div>
           </div>
         }
       </div>
 
       <div class="modal-footer">
-        @if (selectedAction()) {
-          <button class="confirm-btn" (click)="confirmAction()">
-            Confirm {{ selectedAction() === 'buy' ? 'Buy' : 'Sell' }} Action
-          </button>
+        @if (!showSuccess()) {
+          @if (selectedAction()) {
+            <button class="confirm-btn" (click)="confirmAction()">
+              Confirm {{ selectedAction() === 'buy' ? 'Buy' : 'Sell' }} Action
+            </button>
+          }
+          <button class="cancel-btn" (click)="closeModal()">Cancel</button>
         }
-        <button class="cancel-btn" (click)="closeModal()">Cancel</button>
       </div>
     </div>
   </div>

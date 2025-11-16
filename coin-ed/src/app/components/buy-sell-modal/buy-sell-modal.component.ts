@@ -16,6 +16,8 @@ export class BuySellModalComponent {
   agentType = signal<AgentType>('buyer');
   selectedAction = signal<ActionType | null>(null);
   generatedMessage = signal<string>('');
+  successMessage = signal<string>('');
+  showSuccess = signal(false);
 
   close = output<void>();
   actionSelected = output<{ agentType: AgentType; action: ActionType }>();
@@ -24,13 +26,21 @@ export class BuySellModalComponent {
     this.agentType.set(type);
     this.selectedAction.set(null);
     this.generatedMessage.set('');
+    this.successMessage.set('');
+    this.showSuccess.set(false);
     this.isOpen.set(true);
+    
+    // Auto-select the action based on agent type
+    const action = type === 'buyer' ? 'buy' : 'sell';
+    this.selectAction(action);
   }
 
   closeModal(): void {
     this.isOpen.set(false);
     this.selectedAction.set(null);
     this.generatedMessage.set('');
+    this.successMessage.set('');
+    this.showSuccess.set(false);
     this.close.emit();
   }
 
@@ -65,12 +75,22 @@ export class BuySellModalComponent {
 
   confirmAction(): void {
     if (this.selectedAction()) {
+      const action = this.selectedAction()!;
+      
       this.actionSelected.emit({
         agentType: this.agentType(),
-        action: this.selectedAction()!
+        action: action
       });
       
-      // Show success notification
+      // Show success message
+      this.showSuccess.set(true);
+      this.successMessage.set(
+        action === 'buy' 
+          ? '✅ Successfully bought!' 
+          : '✅ Successfully sold!'
+      );
+      
+      // Close modal after showing success message
       setTimeout(() => {
         this.closeModal();
       }, 2000);

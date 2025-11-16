@@ -285,3 +285,46 @@
 .modal-content::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 212, 170, 0.5);
 }
+
+/* Success state styles */
+.success-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  animation: successSlideIn 0.5s ease;
+}
+
+@keyframes successSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.success-icon {
+  font-size: 72px;
+  margin-bottom: 20px;
+  animation: successPulse 1s ease infinite;
+}
+
+@keyframes successPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.success-message {
+  color: #00d4aa;
+  font-size: 24px;
+  font-weight: 600;
+  text-align: center;
+}
