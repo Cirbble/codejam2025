@@ -307,21 +307,6 @@
   }
 }
 
-.success-icon {
-  font-size: 72px;
-  margin-bottom: 20px;
-  animation: successPulse 1s ease infinite;
-}
-
-@keyframes successPulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-}
-
 .success-title {
   color: #00d4aa;
   font-size: 24px;
