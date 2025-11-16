@@ -129,14 +129,15 @@ export class DataService {
    */
   private updatePortfolio(): void {
     const coins = this.coins();
-    const totalBalance = coins.reduce((sum, coin) => sum + coin.balance, 0);
+    // Calculate total as sum of all coin prices (more meaningful than balance)
+    const totalBalance = coins.reduce((sum, coin) => sum + (coin.price || 0), 0);
 
     const portfolioCoins: PortfolioCoin[] = coins
-      .filter(coin => coin.balance > 0)
+      .filter(coin => coin.price > 0)
       .map(coin => ({
         name: coin.name,
         symbol: coin.symbol,
-        percentage: totalBalance > 0 ? Math.round((coin.balance / totalBalance) * 100) : 0,
+        percentage: totalBalance > 0 ? Math.round(((coin.price || 0) / totalBalance) * 100) : 0,
         icon: coin.icon
       }))
       .sort((a, b) => b.percentage - a.percentage);

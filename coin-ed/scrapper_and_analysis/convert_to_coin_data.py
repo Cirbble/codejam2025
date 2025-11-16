@@ -93,10 +93,49 @@ def search_token_by_name(token_name: str, chain: str = "solana") -> Optional[Dic
         print(f"  Error searching for token {token_name}: {str(e)}")
         return None
 
+def search_jupiter_token(token_symbol: str) -> Optional[Dict]:
+    """
+    Search for token in Jupiter token list to get logo.
+    Jupiter has comprehensive Solana token metadata including logos.
+    Uses static CDN to avoid DNS issues.
+    """
+    try:
+        print(f"  Checking Jupiter token list for {token_symbol} logo...")
+
+        # Use GitHub raw content as alternative (Jupiter tokens are on GitHub)
+        # Or use cached/local file approach
+        jupiter_url = "https://cache.jup.ag/tokens"
+
+        response = requests.get(jupiter_url, timeout=10)
+
+        if response.status_code == 200:
+            tokens = response.json()
+
+            # Search by symbol
+            for token in tokens:
+                if token.get('symbol', '').upper() == token_symbol.upper():
+                    logo_uri = token.get('logoURI')
+                    if logo_uri:
+                        print(f"  ✓ Found logo in Jupiter: {logo_uri[:60]}...")
+                        return {
+                            'logo': logo_uri,
+                            'address': token.get('address'),
+                            'name': token.get('name'),
+                            'symbol': token.get('symbol'),
+                            'decimals': token.get('decimals', 9)
+                        }
+
+        return None
+
+    except Exception as e:
+        # Silently fail - Jupiter is just for logos
+        return None
+
 def search_solana_token(token_symbol: str) -> Optional[Dict]:
     """
     Search for a Solana token using DexScreener API (better Solana coverage than Moralis).
     DexScreener aggregates data from all Solana DEXs.
+    Falls back to Jupiter for logos if DexScreener doesn't have them.
     """
     try:
         print(f"  Searching for {token_symbol} on Solana via DexScreener...")
@@ -125,13 +164,21 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
                 price_usd = float(best_pair.get('priceUsd', 0))
                 price_change_24h = float(best_pair.get('priceChange', {}).get('h24', 0) or 0)
 
+                logo = best_pair.get('info', {}).get('imageUrl')
+
+                # If no logo from DexScreener, try Jupiter
+                if not logo:
+                    jupiter_data = search_jupiter_token(token_symbol)
+                    if jupiter_data:
+                        logo = jupiter_data.get('logo')
+
                 return {
                     'address': base_token.get('address', 'N/A'),
                     'name': base_token.get('name', token_symbol),
                     'symbol': base_token.get('symbol', token_symbol),
                     'decimals': 9,  # Solana standard
-                    'logo': best_pair.get('info', {}).get('imageUrl'),
-                    'thumbnail': best_pair.get('info', {}).get('imageUrl'),
+                    'logo': logo,
+                    'thumbnail': logo,
                     'price_usd': price_usd,
                     'price_change_24h': price_change_24h,
                     'chain': 'solana',
