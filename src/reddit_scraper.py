@@ -19,7 +19,7 @@ _global_post_id_counter = 1
 _post_id_lock = threading.Lock()
 
 # Global semaphore to limit concurrent agent calls across ALL instances
-# With 3 parallel scrapers, limit to 1 per instance = 3 total max
+# Set to 1 to queue all agent calls - only 1 agent call happens at a time globally
 _agent_semaphore = threading.Semaphore(1)
 
 
@@ -619,18 +619,38 @@ class RedditScraper:
         try:
             self.client.navigate(post_url, wait_time=3)
             
-            # Wait at least 1 second for the post page to fully load before scraping comments
-            print(f"  ⏳ Waiting 1s for post page to load...")
-            time.sleep(1)
+            # Poll for comments: wait 1s, check, repeat until comments found or 7s total elapsed
+            max_wait_time = 7  # Maximum total wait time in seconds
+            check_interval = 1  # Check every 1 second
+            waited_so_far = 0
+            comments_found = False
             
-            # Wait for comments to actually appear on the page
-            try:
-                self.client.page.wait_for_selector('shreddit-comment', timeout=5000, state='attached')
-                print(f"  ✅ Comments loaded")
-            except Exception:
-                # Fallback: wait a bit more if selector doesn't appear
-                print(f"  ⏳ Comments not immediately visible, waiting 2s more...")
-                time.sleep(2)
+            while waited_so_far < max_wait_time and not comments_found:
+                print(f"  ⏳ Waiting {check_interval}s for comments to load... (total: {waited_so_far + check_interval}s)")
+                time.sleep(check_interval)
+                waited_so_far += check_interval
+                
+                # Check if comments are present
+                try:
+                    check_script = """
+                    (function() {
+                        const commentElements = document.querySelectorAll('shreddit-comment');
+                        return commentElements.length > 0;
+                    })();
+                    """
+                    result = self.client.execute_script(check_script, retries=1)
+                    has_comments = result if isinstance(result, bool) else result.get("result", False) if isinstance(result, dict) else False
+                    
+                    if has_comments:
+                        print(f"  ✅ Comments found after {waited_so_far}s")
+                        comments_found = True
+                        break
+                except Exception:
+                    # If check fails, continue waiting
+                    pass
+            
+            if not comments_found:
+                print(f"  ⚠️ No comments found after {waited_so_far}s, proceeding anyway...")
             
             script = f"""
             (function() {{
@@ -638,18 +658,54 @@ class RedditScraper:
                 // Reddit uses shreddit-comment elements
                 const commentElements = document.querySelectorAll('shreddit-comment');
                 
+                console.log('Found ' + commentElements.length + ' comment elements');
+                
                 for (let i = 0; i < Math.min({limit}, commentElements.length); i++) {{
                     const comment = commentElements[i];
-                    // Comments are in div with slot="comment" or id ending in -comment-rtjson-content
-                    const commentContent = comment.querySelector('[slot="comment"], [id*="-comment-rtjson-content"], .md');
-                    if (commentContent) {{
-                        const text = commentContent.textContent.trim();
-                        if (text && text.length > 3) {{
-                            comments.push(text);
+                    let text = '';
+                    
+                    // Try multiple selectors to find comment text
+                    const selectors = [
+                        'shreddit-comment-body',
+                        '[slot="comment-body"]',
+                        '[slot="comment"]',
+                        '[id*="-comment-rtjson-content"]',
+                        'faceplate-tracker[slot="comment-body"]',
+                        '.md',
+                        'p',
+                        'div[data-testid="comment"]',
+                        'article',
+                        'div[class*="comment"]',
+                        'div[class*="Comment"]'
+                    ];
+                    
+                    for (const selector of selectors) {{
+                        const content = comment.querySelector(selector);
+                        if (content) {{
+                            text = content.textContent.trim();
+                            // Remove common UI noise
+                            text = text.replace(/reply|share|report|give award|permalink|embed|save|parent|context|level \d+/gi, '').trim();
+                            if (text && text.length > 10) {{
+                                break;
+                            }}
                         }}
+                    }}
+                    
+                    // Fallback: get all text from the comment element itself
+                    if (!text || text.length <= 10) {{
+                        text = comment.textContent.trim();
+                        // Remove common UI elements and noise
+                        text = text.replace(/reply|share|report|give award|permalink|embed|save|parent|context|level \d+|\\d+ (points|point)|\\d+ (minutes|hours|days|weeks|months|years) ago/gi, '');
+                        text = text.replace(/\\n\\s*\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                    }}
+                    
+                    // Filter out very short or common bot messages
+                    if (text && text.length > 10 && !text.match(/^(reply|share|report|permalink|embed|save)$/i)) {{
+                        comments.push(text);
                     }}
                 }}
                 
+                console.log('Extracted ' + comments.length + ' comments');
                 return comments;
             }})();
             """
@@ -657,6 +713,17 @@ class RedditScraper:
             # execute_script now has retry logic for execution context errors
             result = self.client.execute_script(script, retries=2)
             comments = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
+            
+            if not comments:
+                # Check how many comment elements exist on the page
+                check_count_script = "document.querySelectorAll('shreddit-comment').length;"
+                count_result = self.client.execute_script(check_count_script, retries=1)
+                element_count = count_result if isinstance(count_result, int) else count_result.get("result", 0) if isinstance(count_result, dict) else 0
+                print(f"  ⚠️ No comments extracted despite {element_count} comment elements found on page")
+            
+            if comments:
+                print(f"  ✅ Extracted {len(comments)} comments")
+            
             return comments[:limit] if comments else []
         except Exception as e:
             error_msg = str(e)
@@ -747,6 +814,39 @@ class RedditScraper:
                     seen_links.add(post.link)
                 all_posts.append(post)
                 new_posts_this_page += 1
+                
+                # Scrape comments immediately after finding the post
+                if scrape_comments and post.link and post.comment_count > 0:
+                    print(f"  📝 Scraping comments for post {post.id} (has {post.comment_count} comments)...")
+                    comments = self.scrape_comments(post.link, limit=10)
+                    post.comments = comments
+                    post.comment_count = len(comments)
+                    
+                    # Update JSON file with comments
+                    self._update_post_in_json(post)
+                    
+                    # Navigate back to subreddit listing after scraping comments (use direct navigation instead of go_back to avoid timeouts)
+                    try:
+                        subreddit_url = f"https://www.reddit.com/r/{subreddit}/new/"
+                        self.client.navigate(subreddit_url, wait_time=2)
+                        time.sleep(1)  # Wait for page to load
+                    except Exception as e:
+                        print(f"  ⚠️ Error navigating back to subreddit: {e}, continuing anyway...")
+                        # Try to navigate again
+                        try:
+                            self.client.navigate(subreddit_url, wait_time=1)
+                        except:
+                            pass
+                    
+                    # Now that we have comments, try token identification again if it wasn't found
+                    if not post.token_name and (post.title or post.content):
+                        print(f"  🤖 Retrying token identification for post {post.id} with comments...")
+                        self._start_token_identification_async(post)
+                elif scrape_comments and post.link and post.comment_count == 0:
+                    # Post has no comments, skip scraping
+                    post.comments = []
+                    # Still update JSON to save the post (even without comments)
+                    self._update_post_in_json(post)
             
             if found_old_post:
                 break
@@ -757,10 +857,18 @@ class RedditScraper:
                 break
             
             # Navigate to next page by scrolling and loading more
-            print(f"  ⏭️ Loading next page...")
+            print(f"  ⏭️ Scrolling to load more posts...")
             try:
+                # Ensure we're on the subreddit page (in case navigation back failed)
+                current_url = self.client.page.url
+                if f"/r/{subreddit}/" not in current_url:
+                    print(f"  🔄 Not on subreddit page, navigating to r/{subreddit}/new/...")
+                    self.client.navigate(f"https://www.reddit.com/r/{subreddit}/new/", wait_time=2)
+                    time.sleep(2)
+                
                 # Scroll multiple times to trigger infinite scroll loading
                 # Reddit uses infinite scroll, so we need to scroll aggressively
+                print(f"  📜 Scrolling to load more posts (5 scrolls)...")
                 for scroll_attempt in range(5):
                     self.client.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     time.sleep(2)  # Wait for new posts to load
@@ -768,17 +876,17 @@ class RedditScraper:
                 # Wait a bit more for Reddit's infinite scroll to load
                 time.sleep(3)
                 
-                # If we got fewer posts than expected, scroll even more aggressively
-                if len(page_posts) < limit:
-                    print(f"  ⚠️ Only got {len(page_posts)} posts (expected {limit}), scrolling more aggressively...")
-                    # Try scrolling more aggressively
-                    for _ in range(10):
-                        self.client.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                        time.sleep(1)
-                    time.sleep(4)  # Wait longer for more posts to load
+                # Always scroll more aggressively to ensure we get enough posts
+                print(f"  📜 Additional aggressive scrolling (10 more scrolls)...")
+                for _ in range(10):
+                    self.client.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(1.5)
+                time.sleep(4)  # Wait longer for more posts to load
+                
+                print(f"  ✅ Finished scrolling, ready to scrape next batch")
             except Exception as e:
-                print(f"  ⚠️ Error scrolling: {e}, stopping")
-                break
+                print(f"  ⚠️ Error scrolling: {e}, continuing anyway...")
+                # Don't break, just continue - maybe we can still get posts
             
             page_num += 1
             
@@ -789,21 +897,8 @@ class RedditScraper:
         
         print(f"  ✅ Scraped {len(all_posts)} posts from past week")
         
-        # Enhance posts with comments and screenshots
+        # Take screenshots if requested (comments already scraped above)
         for post in all_posts:
-            # Scrape comments if requested
-            if scrape_comments and post.link:
-                print(f"  📝 Scraping comments for post {post.id}...")
-                comments = self.scrape_comments(post.link, limit=10)
-                post.comments = comments
-                post.comment_count = len(comments)
-                
-                # Now that we have comments, try token identification again if it wasn't found
-                if not post.token_name and (post.title or post.content):
-                    print(f"  🤖 Retrying token identification for post {post.id} with comments...")
-                    self._start_token_identification_async(post)
-            
-            # Take screenshot if requested
             if take_screenshots:
                 print(f"  📸 Taking screenshot for post {post.id}...")
                 screenshot_path = self.take_screenshot(post)
