@@ -41,7 +41,7 @@ export class CoinCardComponent {
     const hype = this.coin.hype || 0;
     const community = this.coin.communityHype || 0;
     const popularity = this.coin.popularity || 0;
-    
+
     // Weighted average: 30% hype, 40% community, 30% popularity
     return (hype * 0.3 + community * 0.4 + popularity * 0.3);
   }
@@ -55,6 +55,16 @@ export class CoinCardComponent {
 
   onViewDetails(): void {
     this.viewDetails.emit(this.coin);
+  }
+
+  onImageError(event: Event): void {
+    // Hide the broken image and show fallback text
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
+    const fallback = img.parentElement?.querySelector('.coin-icon-text');
+    if (fallback) {
+      (fallback as HTMLElement).style.display = 'flex';
+    }
   }
 }
 

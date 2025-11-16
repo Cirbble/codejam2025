@@ -53,13 +53,19 @@ export class DataService {
       const coins = [...this.coins()];
       coins[existingCoinIndex] = {
         ...coins[existingCoinIndex],
+        address: item.address || coins[existingCoinIndex].address,
         price: item.price || coins[existingCoinIndex].price,
+        logo: item.logo || coins[existingCoinIndex].logo,
+        chain: item.chain || coins[existingCoinIndex].chain,
+        decimals: item.decimals || coins[existingCoinIndex].decimals,
         changePercentage: item.changePercentage || coins[existingCoinIndex].changePercentage,
         feedback: item.feedback || coins[existingCoinIndex].feedback,
         chartData: item.chartData || coins[existingCoinIndex].chartData,
         hype: item.raw_sentiment_score !== undefined ? item.raw_sentiment_score : coins[existingCoinIndex].hype,
         communityHype: item.aggregate_sentiment_score !== undefined ? item.aggregate_sentiment_score : coins[existingCoinIndex].communityHype,
         popularity: item.engagement_score !== undefined ? item.engagement_score : coins[existingCoinIndex].popularity,
+        confidence: item.confidence || coins[existingCoinIndex].confidence,
+        recommendation: item.recommendation || coins[existingCoinIndex].recommendation,
         latestPost: this.extractPostData(item) || coins[existingCoinIndex].latestPost
       };
       this.coins.set(coins);
@@ -69,8 +75,12 @@ export class DataService {
         id: coinId,
         name: item.name || coinId,
         symbol: item.symbol || coinId,
+        address: item.address,
         price: item.price || 0,
         balance: item.balance || 0,
+        decimals: item.decimals,
+        logo: item.logo,
+        chain: item.chain,
         feedback: item.feedback || '',
         changePercentage: item.changePercentage || 0,
         chartData: item.chartData || [],
@@ -78,6 +88,8 @@ export class DataService {
         hype: item.raw_sentiment_score,
         communityHype: item.aggregate_sentiment_score,
         popularity: item.engagement_score,
+        confidence: item.confidence,
+        recommendation: item.recommendation,
         latestPost: this.extractPostData(item)
       };
       this.coins.set([...this.coins(), newCoin]);
@@ -169,8 +181,12 @@ export class DataService {
         id: item.id,
         name: item.name,
         symbol: item.symbol,
+        address: item.address,
         price: item.price,
         balance: item.balance,
+        decimals: item.decimals,
+        logo: item.logo,
+        chain: item.chain,
         feedback: item.feedback,
         changePercentage: item.changePercentage,
         chartData: this.generateMockChartData(),
@@ -178,6 +194,8 @@ export class DataService {
         hype: item.raw_sentiment_score,
         communityHype: item.aggregate_sentiment_score,
         popularity: item.engagement_score,
+        confidence: item.confidence,
+        recommendation: item.recommendation,
         latestPost: this.extractPostData(item)
       }));
 

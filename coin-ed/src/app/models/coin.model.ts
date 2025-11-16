@@ -2,8 +2,12 @@ export interface Coin {
   id: string;
   name: string;
   symbol: string;
+  address?: string; // Blockchain address
   price: number;
   balance: number;
+  decimals?: number; // Token decimals
+  logo?: string; // Logo URL from API
+  chain?: string; // Blockchain (solana, ethereum, etc)
   feedback: string;
   changePercentage: number;
   chartData?: number[];
@@ -12,6 +16,7 @@ export interface Coin {
   communityHype?: number; // aggregate_sentiment_score
   popularity?: number; // engagement_score
   confidence?: number; // calculated from the three scores
+  recommendation?: string; // BUY/HOLD/SELL
   latestPost?: CoinPost;
 }
 

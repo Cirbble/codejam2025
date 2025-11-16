@@ -2,7 +2,11 @@
   <div class="coin-header">
     <div class="coin-info">
       <div class="coin-icon" [class]="'icon-' + coin.id">
-        {{ coin.icon || coin.symbol.charAt(0) }}
+        @if (coin.logo) {
+          <img [src]="coin.logo" [alt]="coin.symbol" class="coin-logo-img" (error)="onImageError($event)">
+        } @else {
+          <span class="coin-icon-text">{{ coin.icon || coin.symbol.charAt(0) }}</span>
+        }
       </div>
       <div class="coin-details">
         <h3>{{ coin.name }}</h3>
@@ -51,8 +55,8 @@
           <span class="confidence-value">{{ (calculateConfidence() * 100).toFixed(0) }}%</span>
         </div>
         <div class="confidence-track">
-          <div 
-            class="confidence-fill" 
+          <div
+            class="confidence-fill"
             [style.width.%]="calculateConfidence() * 100"
             [style.background]="getConfidenceColor()"
           ></div>
