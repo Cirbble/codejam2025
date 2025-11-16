@@ -41,14 +41,20 @@
             [class.active]="selectedCoinId === coin.id"
             (click)="selectCoin(coin.id)"
           >
-            <div class="coin-list-icon">{{ coin.icon || coin.symbol.charAt(0) }}</div>
+            <div class="coin-list-icon">
+              @if (coin.logo) {
+                <img [src]="coin.logo" [alt]="coin.symbol" class="sidebar-coin-logo" (error)="onSidebarImageError($event)">
+              } @else {
+                <span class="sidebar-coin-text">{{ coin.icon || coin.symbol.charAt(0) }}</span>
+              }
+            </div>
             <div class="coin-list-info">
               <span class="coin-list-name">{{ coin.name }}</span>
               <span class="coin-list-symbol">{{ coin.symbol }}</span>
             </div>
-            <div class="coin-list-recommendation" 
-                 [class.buy]="getRecommendation(coin) === 'BUY'" 
-                 [class.hold]="getRecommendation(coin) === 'HOLD'" 
+            <div class="coin-list-recommendation"
+                 [class.buy]="getRecommendation(coin) === 'BUY'"
+                 [class.hold]="getRecommendation(coin) === 'HOLD'"
                  [class.sell]="getRecommendation(coin) === 'SELL'">
               {{ getRecommendation(coin) }}
             </div>

@@ -138,5 +138,20 @@ export class DashboardComponent {
     if (confidence >= 55) return 'HOLD';
     return 'SELL';
   }
+
+  /**
+   * Handle sidebar logo image errors
+   */
+  onSidebarImageError(event: Event): void {
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
+    const parent = img.parentElement;
+    if (parent) {
+      const fallback = document.createElement('span');
+      fallback.className = 'sidebar-coin-text';
+      fallback.textContent = img.alt.charAt(0);
+      parent.appendChild(fallback);
+    }
+  }
 }
 

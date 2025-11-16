@@ -129,17 +129,23 @@ export class DataService {
    */
   private updatePortfolio(): void {
     const coins = this.coins();
-    // Calculate total as sum of all coin prices (more meaningful than balance)
-    const totalBalance = coins.reduce((sum, coin) => sum + (coin.price || 0), 0);
+    // Calculate total portfolio value: sum of (price × balance) for each coin
+    const totalBalance = coins.reduce((sum, coin) => {
+      const coinValue = (coin.price || 0) * (coin.balance || 0);
+      return sum + coinValue;
+    }, 0);
 
     const portfolioCoins: PortfolioCoin[] = coins
-      .filter(coin => coin.price > 0)
-      .map(coin => ({
-        name: coin.name,
-        symbol: coin.symbol,
-        percentage: totalBalance > 0 ? Math.round(((coin.price || 0) / totalBalance) * 100) : 0,
-        icon: coin.icon
-      }))
+      .filter(coin => coin.balance > 0)
+      .map(coin => {
+        const coinValue = (coin.price || 0) * (coin.balance || 0);
+        return {
+          name: coin.name,
+          symbol: coin.symbol,
+          percentage: totalBalance > 0 ? Math.round((coinValue / totalBalance) * 100) : 0,
+          icon: coin.icon
+        };
+      })
       .sort((a, b) => b.percentage - a.percentage);
 
     this.portfolio.set({ totalBalance, coins: portfolioCoins });

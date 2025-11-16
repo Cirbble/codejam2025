@@ -164,16 +164,32 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
                 price_usd = float(best_pair.get('priceUsd', 0))
                 price_change_24h = float(best_pair.get('priceChange', {}).get('h24', 0) or 0)
 
-                logo = best_pair.get('info', {}).get('imageUrl')
+                # Try manual logo mapping first (for well-known tokens)
+                logo = MANUAL_LOGOS.get(token_symbol.upper())
 
-                # If no logo from DexScreener, try Jupiter
+                # If no manual mapping, try DexScreener
                 if not logo:
+                    logo = best_pair.get('info', {}).get('imageUrl')
+
+                token_address = base_token.get('address', 'N/A')
+
+                # Try multiple sources for logo (DexScreener -> Jupiter -> Moralis)
+                if not logo:
+                    print(f"  No logo from DexScreener, trying Jupiter...")
                     jupiter_data = search_jupiter_token(token_symbol)
                     if jupiter_data:
                         logo = jupiter_data.get('logo')
 
+                # If still no logo, try Moralis as last resort
+                if not logo and token_address != 'N/A':
+                    print(f"  No logo from Jupiter, trying Moralis...")
+                    moralis_logo = get_moralis_token_logo(token_address)
+                    if moralis_logo:
+                        logo = moralis_logo
+                        print(f"  ✓ Found logo in Moralis!")
+
                 return {
-                    'address': base_token.get('address', 'N/A'),
+                    'address': token_address,
                     'name': base_token.get('name', token_symbol),
                     'symbol': base_token.get('symbol', token_symbol),
                     'decimals': 9,  # Solana standard
@@ -193,6 +209,40 @@ def search_solana_token(token_symbol: str) -> Optional[Dict]:
         print(f"  Error searching Solana token via DexScreener: {str(e)}")
         # Try Moralis as fallback
         return search_solana_token_moralis(token_symbol)
+
+# Manual logo mappings for well-known tokens (highest priority)
+# Using CoinGecko CDN for reliable, high-quality logos
+MANUAL_LOGOS = {
+    'BTC': 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
+    'ETH': 'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
+    'SOL': 'https://assets.coingecko.com/coins/images/4128/large/solana.png',
+    'USDC': 'https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png',
+    'USDT': 'https://assets.coingecko.com/coins/images/325/large/Tether.png',
+}
+
+def get_moralis_token_logo(token_address: str) -> Optional[str]:
+    """
+    Get token logo from Moralis API by token address.
+    """
+    try:
+        metadata_url = f"{MORALIS_BASE_URL}/token/mainnet/{token_address}/metadata"
+        headers = {
+            "Accept": "application/json",
+            "X-API-Key": MORALIS_API_KEY
+        }
+
+        response = requests.get(metadata_url, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            logo = data.get('logoURI') or data.get('logo') or data.get('image')
+            return logo
+
+        return None
+
+    except Exception:
+        # Silently fail - logo is optional
+        return None
 
 def search_solana_token_moralis(token_symbol: str) -> Optional[Dict]:
     """
