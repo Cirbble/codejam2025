@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Coin } from '../../models/coin.model';
 import { GaugeComponent } from '../gauge/gauge';
@@ -12,6 +12,8 @@ import { GaugeComponent } from '../gauge/gauge';
 })
 export class CoinCardComponent {
   @Input() coin!: Coin;
+  @Input() hideActionButton = false;
+  @Output() viewDetails = new EventEmitter<Coin>();
 
   generateChartPoints(): string {
     if (!this.coin.chartData || this.coin.chartData.length === 0) {
@@ -49,6 +51,10 @@ export class CoinCardComponent {
     if (confidence >= 0.7) return '#00d4aa'; // Green
     if (confidence >= 0.4) return '#6B8AFF'; // Blue
     return '#ff6b6b'; // Red
+  }
+
+  onViewDetails(): void {
+    this.viewDetails.emit(this.coin);
   }
 }
 

@@ -79,23 +79,39 @@ export class DashboardComponent {
   }
 
   /**
-   * Calculate overall confidence score from sentiment metrics
-   * Returns a percentage (0-100)
+   * Calculate overall confidence score from sentiment metrics with inverse bell curve
+   * Returns a percentage (0-100) with U-shaped distribution (more extremes, less middle)
    */
   getConfidenceScore(coin: any): number {
     // Combine hype (raw sentiment), communityHype (aggregate), and popularity (engagement)
     // Weight: 30% raw sentiment, 50% aggregate sentiment, 20% engagement
-    const hype = coin.hype || 0;
-    const communityHype = coin.communityHype || 0;
-    const popularity = coin.popularity || 0;
+    const hype = coin.hype || 0.5;  // Default to neutral
+    const communityHype = coin.communityHype || 0.5;
+    const popularity = coin.popularity || 0.5;
     
-    // Convert from -1 to 1 scale to 0 to 1 scale
-    const normalizedHype = (hype + 1) / 2;
-    const normalizedCommunity = (communityHype + 1) / 2;
-    const normalizedPopularity = popularity; // Already 0-1
-    
+    // All values already in 0-1 range
     // Calculate weighted average
-    const confidence = (normalizedHype * 0.3) + (normalizedCommunity * 0.5) + (normalizedPopularity * 0.2);
+    let confidence = (hype * 0.3) + (communityHype * 0.5) + (popularity * 0.2);
+    
+    // Apply inverse bell curve transformation (U-shape)
+    // This pushes values away from 0.5 (middle) toward 0 or 1 (extremes)
+    const center = 0.5;
+    const distanceFromCenter = Math.abs(confidence - center);
+    
+    // Amplify distance from center using power function
+    // Values near 0.5 get pushed toward extremes
+    const amplifiedDistance = Math.pow(distanceFromCenter * 2, 1.4) / 2;
+    
+    if (confidence < center) {
+      // Push down toward 0
+      confidence = center - amplifiedDistance;
+    } else {
+      // Push up toward 1
+      confidence = center + amplifiedDistance;
+    }
+    
+    // Ensure bounds
+    confidence = Math.max(0, Math.min(1, confidence));
     
     // Convert to percentage
     return Math.round(confidence * 100);
@@ -103,6 +119,26 @@ export class DashboardComponent {
 
   openSettings(): void {
     this.router.navigate(['/settings']);
+  }
+
+  goToHomepage(): void {
+    this.selectedCoinId = null;
+  }
+
+  /**
+   * Get recommendation (BUY/HOLD/SELL) based on confidence score
+   */
+  getRecommendation(coin: any): string {
+    // If coin already has recommendation from backend, use it
+    if (coin.recommendation) {
+      return coin.recommendation;
+    }
+    
+    // Otherwise calculate it
+    const confidence = this.getConfidenceScore(coin);
+    if (confidence >= 75) return 'BUY';
+    if (confidence >= 55) return 'HOLD';
+    return 'SELL';
   }
 }
 

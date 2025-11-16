@@ -3,7 +3,7 @@
   <header class="top-bar">
     <!-- Left: Logo and Name -->
     <div class="top-bar-left">
-      <div class="logo-container">
+      <div class="logo-container" (click)="goToHomepage()">
         <img src="logo.png" alt="Coin'ed Logo" class="logo-icon">
         <h1 class="logo">Coin'ed</h1>
       </div>
@@ -46,8 +46,11 @@
               <span class="coin-list-name">{{ coin.name }}</span>
               <span class="coin-list-symbol">{{ coin.symbol }}</span>
             </div>
-            <div class="coin-list-change" [class.positive]="getConfidenceScore(coin) >= 50" [class.negative]="getConfidenceScore(coin) < 50">
-              {{ getConfidenceScore(coin) }}%
+            <div class="coin-list-recommendation" 
+                 [class.buy]="getRecommendation(coin) === 'BUY'" 
+                 [class.hold]="getRecommendation(coin) === 'HOLD'" 
+                 [class.sell]="getRecommendation(coin) === 'SELL'">
+              {{ getRecommendation(coin) }}
             </div>
             @if (isRecentlyUpdated(coin.id)) {
               <span class="new-badge">NEW</span>
@@ -84,14 +87,14 @@
       <!-- Selected Coin Details or Overview -->
       @if (selectedCoinId && getSelectedCoin()) {
         <section class="selected-coin-view">
-          <app-coin-card [coin]="getSelectedCoin()!"></app-coin-card>
+          <app-coin-card [coin]="getSelectedCoin()!" [hideActionButton]="true"></app-coin-card>
           <app-post-display [post]="getSelectedCoin()!.latestPost"></app-post-display>
         </section>
       } @else {
         <!-- Coin Cards Grid -->
         <section class="coins-grid">
           @for (coin of dataService.coins(); track coin.id) {
-            <app-coin-card [coin]="coin"></app-coin-card>
+            <app-coin-card [coin]="coin" (viewDetails)="selectCoin($event.id)"></app-coin-card>
           }
           @empty {
             <div class="empty-state">
