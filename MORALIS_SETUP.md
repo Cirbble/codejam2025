@@ -9,10 +9,9 @@ Your project now has full Moralis Solana API integration in both **TypeScript (A
 ## 📁 Files Created
 
 ### TypeScript/Angular:
-1. **`src/app/config/moralis.config.ts`** - Configuration
+1. **`src/app/config/moralis.config.ts`** - Configuration constants
 2. **`src/app/services/moralis-solana.service.ts`** - Complete API service
-3. **`src/environments/environment.ts`** - Production config
-4. **`src/environments/environment.development.ts`** - Development config
+3. **`src/app/config/server.config.ts`** - Server-side .env loader
 
 ### Python:
 1. **`scrapper_and_analysis/moralis_solana_api.py`** - Complete Python API wrapper
@@ -21,85 +20,32 @@ Your project now has full Moralis Solana API integration in both **TypeScript (A
 
 ## 🔑 Setup Instructions
 
-### 1. Get Your Moralis API Key
+### API Key is Already Configured!
 
-1. Go to: https://admin.moralis.io/
-2. Sign up or log in
-3. Create a new project
-4. Copy your API key
+Your Moralis API key is already in the `.env` files:
 
-### 2. Configure API Key
+- **`/Users/muhammadaliullah/WebstormProjects/codejam2025/.env`**
+- **`coin-ed/scrapper_and_analysis/.env`**
 
-#### For Python:
-
-Edit `coin-ed/scrapper_and_analysis/.env`:
+Both files contain:
 ```bash
-MORALIS_API_KEY=your_actual_api_key_here
+MORALIS_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-#### For TypeScript/Angular:
-
-Edit `coin-ed/src/environments/environment.development.ts`:
-```typescript
-export const environment = {
-  production: false,
-  moralisApiKey: 'your_actual_api_key_here',
-};
-```
-
-### 3. Install Dependencies
-
-#### Python:
-```bash
-pip install requests python-dotenv
-```
-
-#### Node/Angular:
-Already included in Angular (uses native fetch)
+✅ **No additional setup needed for Python!**
 
 ---
 
 ## 🚀 Usage Examples
 
-### TypeScript/Angular
+### Python (Ready to Use!)
 
-```typescript
-import { inject } from '@angular/core';
-import { MoralisSolanaService } from './services/moralis-solana.service';
-
-export class MyComponent {
-  private moralisService = inject(MoralisSolanaService);
-
-  async loadTokenData() {
-    // Set API key (if not in environment)
-    this.moralisService.setApiKey('your_key');
-
-    // Get full token data
-    const tokenAddress = 'So11111111111111111111111111111111111111112';
-    const data = await this.moralisService.getFullTokenData(tokenAddress);
-
-    console.log('Token Data:', data);
-    // Output: { name, symbol, logo_url, price, liquidity, ... }
-  }
-
-  async loadMultipleTokens() {
-    const addresses = [
-      'So11111111111111111111111111111111111111112', // SOL
-      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'  // USDC
-    ];
-
-    const tokens = await this.moralisService.getMultipleTokensData(addresses);
-    console.log('Multiple Tokens:', tokens);
-  }
-}
-```
-
-### Python
+The Python wrapper automatically reads from `.env`:
 
 ```python
 from moralis_solana_api import MoralisSolanaAPI
 
-# Initialize (reads from .env automatically)
+# Initialize (reads MORALIS_API_KEY from .env automatically)
 api = MoralisSolanaAPI()
 
 # Get full token data
@@ -109,14 +55,96 @@ data = api.get_full_token_data(sol_address)
 print(f"Token: {data['name']} ({data['symbol']})")
 print(f"Price: ${data['price']:.2f}")
 print(f"24h Change: {data['24h_change']:.2f}%")
-
-# Get multiple tokens
-addresses = [
-    "So11111111111111111111111111111111111111112",
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-]
-tokens = api.get_multiple_tokens_data(addresses)
 ```
+
+### TypeScript/Angular (Manual Key Injection)
+
+Since Angular runs in the browser and can't directly access `.env` files, you need to:
+
+**Option 1: Load key via backend endpoint (Recommended)**
+
+```typescript
+import { inject } from '@angular/core';
+import { MoralisSolanaService } from './services/moralis-solana.service';
+
+export class MyComponent {
+  private moralisService = inject(MoralisSolanaService);
+
+  async ngOnInit() {
+    // Get API key from your backend endpoint
+    const config = await fetch('/api/config').then(r => r.json());
+    this.moralisService.setApiKey(config.moralisApiKey);
+
+    // Now use the service
+    const data = await this.moralisService.getFullTokenData(tokenAddress);
+  }
+}
+```
+
+**Option 2: Use server-side config (SSR)**
+
+```typescript
+// In server.ts or SSR context
+import { getServerConfig } from './app/config/server.config';
+
+// Inject during SSR
+const moralisApiKey = getServerConfig('moralisApiKey');
+// Pass to component via platform state or dependency injection
+```
+
+**Option 3: Direct injection (Development only)**
+
+```typescript
+const moralis = inject(MoralisSolanaService);
+
+// For testing/development - hardcode the key
+moralis.setApiKey('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...');
+
+const data = await moralis.getFullTokenData(address);
+```
+
+---
+
+## 📝 Why This Approach?
+
+### Backend (Python):
+- ✅ Can directly read `.env` files
+- ✅ `python-dotenv` loads environment variables
+- ✅ Secure - API key never exposed to browser
+
+### Frontend (Angular):
+- ❌ Browser can't read `.env` files (security)
+- ✅ Must get key from server-side (SSR or API)
+- ✅ Keeps API key secure on backend
+
+---
+
+## 🎯 Integration with Your Pipeline
+
+### For `convert_to_coin_data.py` (Backend):
+
+Already works! Just use it:
+
+```python
+from moralis_solana_api import MoralisSolanaAPI
+
+api = MoralisSolanaAPI()  # Reads from .env automatically
+
+# In your conversion function:
+for token in tokens:
+    data = api.get_full_token_data(token['address'])
+    if data:
+        token['price'] = data['price']
+        token['logo'] = data['logo_url']
+        token['liquidity'] = data['liquidity']
+```
+
+### For Angular Components:
+
+You'll need to either:
+1. Create a backend API endpoint that proxies Moralis requests
+2. Inject the key during SSR
+3. Load config from a backend endpoint
 
 ---
 

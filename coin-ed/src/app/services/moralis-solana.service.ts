@@ -1,9 +1,28 @@
 import { Injectable } from '@angular/core';
-import { MORALIS_CONFIG, getMoralisApiKey } from '../config/moralis.config';
+import { MORALIS_CONFIG } from '../config/moralis.config';
 
 /**
  * Moralis Solana API Service
  * Complete integration for Solana blockchain data via Moralis API
+ *
+ * SETUP:
+ * The API key is stored in .env file at: coin-ed/scrapper_and_analysis/.env
+ *
+ * USAGE:
+ * 1. For server-side (SSR): Use getServerConfig('moralisApiKey') from server.config.ts
+ * 2. For client-side: Create an API endpoint that proxies requests using the server-side key
+ * 3. Or inject the key during component initialization: service.setApiKey(key)
+ *
+ * EXAMPLE:
+ * ```typescript
+ * const moralis = inject(MoralisSolanaService);
+ *
+ * // Set API key (get from backend endpoint or SSR injection)
+ * moralis.setApiKey('your_api_key_from_backend');
+ *
+ * // Use the service
+ * const data = await moralis.getFullTokenData(address);
+ * ```
  */
 
 export interface TokenMetadata {
@@ -65,12 +84,17 @@ export interface FullTokenData {
   providedIn: 'root'
 })
 export class MoralisSolanaService {
-  private apiKey: string;
+  private apiKey: string = '';
   private maxRetries = 3;
   private retryDelay = 1000; // ms
 
   constructor() {
-    this.apiKey = getMoralisApiKey();
+    // API key must be set explicitly via setApiKey()
+    // This is because Angular frontend can't directly access .env files
+    // The key should be loaded from:
+    // 1. Backend API endpoint
+    // 2. SSR injection
+    // 3. Configuration service
   }
 
   /**
