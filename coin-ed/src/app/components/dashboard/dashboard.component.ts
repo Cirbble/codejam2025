@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ViewChild, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
@@ -7,6 +7,8 @@ import { ControlPanelComponent } from '../control-panel/control-panel.component'
 import { CoinCardComponent } from '../coin-card/coin-card.component';
 import { PostDisplayComponent } from '../post-display/post-display';
 import { ScraperLogsComponent } from '../scraper-logs/scraper-logs.component';
+import { NotificationComponent } from '../notification/notification.component';
+import { TransactionHistoryComponent } from '../transaction-history/transaction-history.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -16,34 +18,63 @@ import { ScraperLogsComponent } from '../scraper-logs/scraper-logs.component';
     ControlPanelComponent,
     CoinCardComponent,
     PostDisplayComponent,
-    ScraperLogsComponent
+    ScraperLogsComponent,
+    NotificationComponent,
+    TransactionHistoryComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
-export class DashboardComponent {
+export class DashboardComponent implements AfterViewInit {
   private router = inject(Router);
   dataService = inject(DataService);
   dataLoader = inject(DataLoaderService);
 
+  @ViewChild(NotificationComponent) notificationComponent!: NotificationComponent;
+
   selectedCoinId: string | null = null;
   recentlyUpdatedCoins: Set<string> = new Set();
+  showTransactionHistory = false;
 
-  loadExampleData(): void {
-    this.dataLoader.loadFromFile('/coin-data.json');
-    // Mark newly loaded coins as recently updated
-    setTimeout(() => {
-      const coins = this.dataService.coins();
-      coins.forEach(coin => {
-        if (!this.recentlyUpdatedCoins.has(coin.id)) {
-          this.recentlyUpdatedCoins.add(coin.id);
-        }
-      });
-      // Clear "new" badges after 5 seconds
-      setTimeout(() => {
-        this.recentlyUpdatedCoins.clear();
-      }, 5000);
-    }, 100);
+  ngAfterViewInit(): void {
+    // Connect the notification component to the data service
+    this.dataService.onBuyNotification = (message: string) => {
+      if (this.notificationComponent) {
+        this.notificationComponent.addNotification(message, 'buy');
+      }
+    };
+
+    // Expose transaction methods to console for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).viewTransactions = () => {
+        const transactions = this.dataService.getTransactions();
+        console.table(transactions.map(t => ({
+          Time: t.timestamp.toLocaleString(),
+          Type: t.type.toUpperCase(),
+          Coin: `${t.coinName} (${t.coinSymbol})`,
+          Amount: `$${t.amount}.00`,
+          Confidence: `${t.confidence}%`
+        })));
+        console.log(`Total Buy Amount: $${this.dataService.getTotalBuyAmount()}.00`);
+        console.log(`Total Sell Amount: $${this.dataService.getTotalSellAmount()}.00`);
+        return transactions;
+      };
+      (window as any).clearTransactions = () => {
+        this.dataService.clearTransactions();
+        console.log('All transactions cleared');
+      };
+      console.log('💡 Transaction helpers available:');
+      console.log('  - viewTransactions() - View all transactions');
+      console.log('  - clearTransactions() - Clear transaction history');
+    }
+  }
+
+  openTransactionHistory(): void {
+    this.showTransactionHistory = true;
+  }
+
+  closeTransactionHistory(): void {
+    this.showTransactionHistory = false;
   }
 
   refreshPrices(): void {

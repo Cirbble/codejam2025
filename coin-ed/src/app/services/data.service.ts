@@ -1,5 +1,5 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { Coin, Portfolio, SentimentData, AgentControls, PortfolioCoin } from '../models/coin.model';
+import { Coin, Portfolio, SentimentData, AgentControls, PortfolioCoin, Transaction } from '../models/coin.model';
 import { PumpPortalService } from './pump-portal';
 import { ScraperService } from './scraper.service';
 import { getTokenAddress } from '../config/token-addresses';
@@ -20,10 +20,20 @@ export class DataService {
     buyerEnabled: false,
     sellerEnabled: false
   });
+  transactions = signal<Transaction[]>([]);
+
+  // Buyer agent interval
+  private buyerInterval: any = null;
+  
+  // Notification callback
+  onBuyNotification?: (message: string) => void;
 
   constructor() {
     // Load data from coin-data.json
     this.loadCoinData();
+
+    // Load transactions from localStorage
+    this.loadTransactions();
 
     // Subscribe to live scraper updates
     this.scraperService.scraperData$.subscribe(posts => {
@@ -212,12 +222,178 @@ export class DataService {
 
   toggleBuyer(): void {
     const current = this.agentControls();
-    this.agentControls.set({ ...current, buyerEnabled: !current.buyerEnabled });
+    const newState = !current.buyerEnabled;
+    this.agentControls.set({ ...current, buyerEnabled: newState });
+
+    if (newState) {
+      this.startBuyerAgent();
+    } else {
+      this.stopBuyerAgent();
+    }
+  }
+
+  /**
+   * Start the buyer agent that automatically buys coins with "BUY" recommendation
+   */
+  private startBuyerAgent(): void {
+    console.log('🤖 Starting AI Buyer Agent...');
+    
+    // Clear any existing interval
+    if (this.buyerInterval) {
+      clearInterval(this.buyerInterval);
+    }
+
+    // Run immediately
+    this.executeBuyerLogic();
+
+    // Then run every 5-15 seconds (random interval)
+    const scheduleNext = () => {
+      const randomDelay = Math.floor(Math.random() * 10000) + 5000; // 5-15 seconds
+      this.buyerInterval = setTimeout(() => {
+        if (this.agentControls().buyerEnabled) {
+          this.executeBuyerLogic();
+          scheduleNext();
+        }
+      }, randomDelay);
+    };
+
+    scheduleNext();
+  }
+
+  /**
+   * Stop the buyer agent
+   */
+  private stopBuyerAgent(): void {
+    console.log('🛑 Stopping AI Buyer Agent...');
+    if (this.buyerInterval) {
+      clearTimeout(this.buyerInterval);
+      this.buyerInterval = null;
+    }
+  }
+
+  /**
+   * Execute buyer logic - find coins with BUY recommendation and simulate purchase
+   */
+  private executeBuyerLogic(): void {
+    const coins = this.coins();
+    const buyCoins = coins.filter(coin => 
+      coin.recommendation?.toUpperCase() === 'BUY' && coin.confidence
+    );
+
+    if (buyCoins.length === 0) {
+      return;
+    }
+
+    // Pick a random coin from the buy list
+    const randomCoin = buyCoins[Math.floor(Math.random() * buyCoins.length)];
+    
+    // Calculate purchase amount based on confidence (1-5 dollars)
+    const confidence = randomCoin.confidence || 50;
+    const purchaseAmount = Math.max(1, Math.min(5, Math.floor((confidence / 100) * 5)));
+
+    // Create transaction record
+    const transaction: Transaction = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: 'buy',
+      coinId: randomCoin.id,
+      coinName: randomCoin.name,
+      coinSymbol: randomCoin.symbol,
+      amount: purchaseAmount,
+      confidence: confidence,
+      timestamp: new Date()
+    };
+
+    // Store transaction
+    this.transactions.set([transaction, ...this.transactions()]);
+    this.saveTransactions();
+
+    // Send notification
+    const message = `Purchased $${purchaseAmount}.00 worth of ${randomCoin.name} (${randomCoin.symbol}) at confidence level ${confidence}%`;
+    console.log(`Agent executed buy: ${message}`);
+    
+    if (this.onBuyNotification) {
+      this.onBuyNotification(message);
+    }
   }
 
   toggleSeller(): void {
     const current = this.agentControls();
     this.agentControls.set({ ...current, sellerEnabled: !current.sellerEnabled });
+  }
+
+  /**
+   * Get all transactions
+   */
+  getTransactions(): Transaction[] {
+    return this.transactions();
+  }
+
+  /**
+   * Get transactions for a specific coin
+   */
+  getTransactionsByCoin(coinId: string): Transaction[] {
+    return this.transactions().filter(t => t.coinId === coinId);
+  }
+
+  /**
+   * Get total amount spent on buys
+   */
+  getTotalBuyAmount(): number {
+    return this.transactions()
+      .filter(t => t.type === 'buy')
+      .reduce((sum, t) => sum + t.amount, 0);
+  }
+
+  /**
+   * Get total amount from sells
+   */
+  getTotalSellAmount(): number {
+    return this.transactions()
+      .filter(t => t.type === 'sell')
+      .reduce((sum, t) => sum + t.amount, 0);
+  }
+
+  /**
+   * Clear all transactions
+   */
+  clearTransactions(): void {
+    this.transactions.set([]);
+    this.saveTransactions();
+  }
+
+  /**
+   * Save transactions to localStorage
+   */
+  private saveTransactions(): void {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('agent-transactions', JSON.stringify(this.transactions()));
+      } catch (error) {
+        console.error('Error saving transactions:', error);
+      }
+    }
+  }
+
+  /**
+   * Load transactions from localStorage
+   */
+  private loadTransactions(): void {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('agent-transactions');
+        if (saved) {
+          const transactions = JSON.parse(saved);
+          // Convert timestamp strings back to Date objects
+          transactions.forEach((t: any) => {
+            t.timestamp = new Date(t.timestamp);
+          });
+          this.transactions.set(transactions);
+          console.log(`Loaded ${transactions.length} transactions from storage`);
+        }
+      } catch (error) {
+        console.error('Error loading transactions:', error);
+      }
+    }
   }
 
   /**

@@ -32,7 +32,7 @@
             type="checkbox"
             [checked]="dataService.agentControls().buyerEnabled"
             [disabled]="!dataService.agentControls().scraperEnabled"
-            (change)="onBuyerToggle()"
+            (click)="onBuyerToggle($event)"
           />
           <span class="slider"></span>
         </label>
@@ -56,7 +56,7 @@
             type="checkbox"
             [checked]="dataService.agentControls().sellerEnabled"
             [disabled]="!dataService.agentControls().scraperEnabled"
-            (change)="onSellerToggle()"
+            (click)="onSellerToggle($event)"
           />
           <span class="slider"></span>
         </label>
@@ -67,4 +67,19 @@
     </div>
   </div>
 </div>
+
+<!-- Confirmation Modals -->
+<app-confirmation-modal
+  [isVisible]="showBuyerConfirmation"
+  [message]="'This will authorize the agent to automatically buy. Continue?'"
+  (confirm)="onBuyerConfirm()"
+  (cancel)="onBuyerCancel()"
+></app-confirmation-modal>
+
+<app-confirmation-modal
+  [isVisible]="showSellerConfirmation"
+  [message]="'This will authorize the agent to automatically sell. Continue?'"
+  (confirm)="onSellerConfirm()"
+  (cancel)="onSellerCancel()"
+></app-confirmation-modal>
 

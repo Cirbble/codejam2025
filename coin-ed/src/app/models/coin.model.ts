@@ -75,3 +75,14 @@ export interface AgentControls {
   sellerEnabled: boolean;
 }
 
+export interface Transaction {
+  id: string;
+  type: 'buy' | 'sell';
+  coinId: string;
+  coinName: string;
+  coinSymbol: string;
+  amount: number;
+  confidence: number;
+  timestamp: Date;
+}
+

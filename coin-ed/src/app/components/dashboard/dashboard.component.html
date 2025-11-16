@@ -71,10 +71,10 @@
         }
       </div>
 
-      <!-- Demo Button in Sidebar -->
+      <!-- Sidebar Footer Actions -->
       <div class="sidebar-footer">
-        <button class="load-data-btn-small" (click)="loadExampleData()">
-          Load Demo Data
+        <button class="load-data-btn-small" (click)="openTransactionHistory()">
+          Transaction History
         </button>
         <button class="load-data-btn-small refresh-btn" (click)="refreshPrices()">
           Refresh Prices
@@ -118,4 +118,12 @@
     </main>
   </div>
 </div>
+
+<!-- Notification Component -->
+<app-notification></app-notification>
+
+<!-- Transaction History Modal -->
+@if (showTransactionHistory) {
+  <app-transaction-history (close)="closeTransactionHistory()"></app-transaction-history>
+}
 

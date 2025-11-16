@@ -1,0 +1,16 @@
+@if (isVisible) {
+  <div class="modal-overlay" (click)="onCancel()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Confirm Action</h3>
+      </div>
+      <div class="modal-body">
+        <p>{{ message }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-cancel" (click)="onCancel()">Cancel</button>
+        <button class="btn btn-confirm" (click)="onConfirm()">Continue</button>
+      </div>
+    </div>
+  </div>
+}

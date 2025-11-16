@@ -1,0 +1,16 @@
+<div class="notification-container">
+  @for (notification of notifications; track notification.id) {
+    <div 
+      class="notification" 
+      [class.buy]="notification.type === 'buy'"
+      [class.sell]="notification.type === 'sell'"
+      (click)="removeNotification(notification.id)"
+    >
+      <div class="notification-content">
+        <h4 class="notification-title">{{ notification.title }}</h4>
+        <p class="notification-message">{{ notification.message }}</p>
+      </div>
+      <button class="notification-close" (click)="removeNotification(notification.id)">×</button>
+    </div>
+  }
+</div>

@@ -1,0 +1,76 @@
+<div class="transaction-history-overlay" (click)="onClose()">
+  <div class="transaction-history-container" (click)="$event.stopPropagation()">
+    <!-- Header -->
+    <div class="history-header">
+      <h2>Agent Transaction History</h2>
+      <button class="close-btn" (click)="onClose()">×</button>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="summary-stats">
+      <div class="stat-card buy">
+        <div class="stat-label">Total Buys</div>
+        <div class="stat-value">${{ getTotalBuyAmount().toFixed(2) }}</div>
+      </div>
+      <div class="stat-card sell">
+        <div class="stat-label">Total Sells</div>
+        <div class="stat-value">${{ getTotalSellAmount().toFixed(2) }}</div>
+      </div>
+      <div class="stat-card net" [class.positive]="getNetAmount() >= 0" [class.negative]="getNetAmount() < 0">
+        <div class="stat-label">Net P/L</div>
+        <div class="stat-value">{{ getNetAmount() >= 0 ? '+' : '' }}${{ getNetAmount().toFixed(2) }}</div>
+      </div>
+      <div class="stat-card total">
+        <div class="stat-label">Total Transactions</div>
+        <div class="stat-value">{{ getTransactions().length }}</div>
+      </div>
+    </div>
+
+    <!-- Transaction List -->
+    <div class="transaction-list">
+      @if (getTransactions().length === 0) {
+        <div class="empty-state">
+          <p>No transactions yet</p>
+          <small>Enable the AI Buyer or Seller to start tracking transactions</small>
+        </div>
+      } @else {
+        <div class="transaction-table">
+          <div class="table-header">
+            <div class="col-time">Time</div>
+            <div class="col-type">Type</div>
+            <div class="col-coin">Coin</div>
+            <div class="col-amount">Amount</div>
+            <div class="col-confidence">Confidence</div>
+          </div>
+          @for (transaction of getTransactions(); track transaction.id) {
+            <div class="transaction-row" [class.buy]="transaction.type === 'buy'" [class.sell]="transaction.type === 'sell'">
+              <div class="col-time">
+                <div class="time-main">{{ formatTime(transaction.timestamp) }}</div>
+                <div class="time-sub">{{ formatDate(transaction.timestamp).split(',')[0] }}</div>
+              </div>
+              <div class="col-type">
+                <span class="type-badge" [class.buy]="transaction.type === 'buy'" [class.sell]="transaction.type === 'sell'">
+                  {{ transaction.type.toUpperCase() }}
+                </span>
+              </div>
+              <div class="col-coin">
+                <div class="coin-name">{{ transaction.coinName }}</div>
+                <div class="coin-symbol">{{ transaction.coinSymbol }}</div>
+              </div>
+              <div class="col-amount">${{ transaction.amount.toFixed(2) }}</div>
+              <div class="col-confidence">{{ transaction.confidence }}%</div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Footer Actions -->
+    <div class="history-footer">
+      <button class="clear-btn" (click)="clearHistory()" [disabled]="getTransactions().length === 0">
+        Clear History
+      </button>
+      <button class="close-footer-btn" (click)="onClose()">Close</button>
+    </div>
+  </div>
+</div>

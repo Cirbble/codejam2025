@@ -1,0 +1,334 @@
+.transaction-history-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.transaction-history-container {
+  background: #0a0a0a;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.history-header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 32px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #fff;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-card.buy {
+  border-left: 3px solid #00d4aa;
+}
+
+.stat-card.sell {
+  border-left: 3px solid #ff4757;
+}
+
+.stat-card.net.positive {
+  border-left: 3px solid #00d4aa;
+}
+
+.stat-card.net.negative {
+  border-left: 3px solid #ff4757;
+}
+
+.stat-card.total {
+  border-left: 3px solid #5b7fff;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 24px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.transaction-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.empty-state p {
+  font-size: 18px;
+  margin: 0 0 8px 0;
+}
+
+.empty-state small {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.transaction-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 140px 80px 1fr 100px 100px;
+  gap: 16px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.transaction-row {
+  display: grid;
+  grid-template-columns: 140px 80px 1fr 100px 100px;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+  align-items: center;
+}
+
+.transaction-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.transaction-row.buy {
+  border-left: 3px solid #00d4aa;
+}
+
+.transaction-row.sell {
+  border-left: 3px solid #ff4757;
+}
+
+.col-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.time-main {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.time-sub {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.type-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.type-badge.buy {
+  background: rgba(0, 212, 170, 0.15);
+  color: #00d4aa;
+}
+
+.type-badge.sell {
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
+}
+
+.col-coin {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coin-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.coin-symbol {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.col-amount {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.col-confidence {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+}
+
+.history-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 12px;
+}
+
+.clear-btn,
+.close-footer-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.clear-btn {
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
+  border: 1px solid rgba(255, 71, 87, 0.3);
+}
+
+.clear-btn:hover:not(:disabled) {
+  background: rgba(255, 71, 87, 0.25);
+  border-color: #ff4757;
+}
+
+.clear-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.close-footer-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.close-footer-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+@media (max-width: 768px) {
+  .summary-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .table-header,
+  .transaction-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .table-header {
+    display: none;
+  }
+
+  .transaction-row {
+    padding: 12px;
+  }
+
+  .col-time,
+  .col-coin {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
+  }
+}
