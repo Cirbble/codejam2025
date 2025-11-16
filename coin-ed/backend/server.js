@@ -93,9 +93,9 @@ app.post('/api/scraper/start', (_req, res) => {
     const pythonPath = 'python3';
     const scriptPath = path.join(__dirname, '../../main.py');
 
-    scraperProcess = spawn(pythonPath, [scriptPath], {
+    scraperProcess = spawn(pythonPath, ['-u', scriptPath], {
       cwd: path.join(__dirname, '../..'),
-      env: { ...process.env },
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -166,14 +166,14 @@ app.post('/api/scraper/stop', (_req, res) => {
     // Immediately broadcast that scraper has stopped (do not trigger frontend reload yet)
     broadcast({ type: 'scraper_stopped', code: null, timestamp: new Date().toISOString() });
 
-    // 1) Run sentiment analysis to produce sentiment.json from scraped_posts.json
-    console.log('🧠 Running sentiment analysis on scraped posts...');
-    const sentimentScriptPath = path.join(__dirname, '../scrapper_and_analysis/sentiment.py');
+  // 1) Run sentiment analysis to produce sentiment.json from scraped_posts.json
+  console.log(`🧠 Running sentiment analysis on scraped posts (trigger: ${trigger})...`);
+  const sentimentScriptPath = path.join(__dirname, '../scrapper_and_analysis/sentiment.py');
 
-    const sentProc = spawn('python3', [sentimentScriptPath], {
-      cwd: path.join(__dirname, '../scrapper_and_analysis'),
-      env: { ...process.env }
-    });
+  const sentProc = spawn('python3', ['-u', sentimentScriptPath], {
+    cwd: path.join(__dirname, '../scrapper_and_analysis'),
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
 
     // Pipe logs for visibility in backend logs and WS
     sentProc.stdout.on('data', (data) => {
@@ -196,14 +196,14 @@ app.post('/api/scraper/stop', (_req, res) => {
         return;
       }
 
-      // 2) Run conversion script to process sentiment.json into public/coin-data.json
-      console.log('🔄 Running conversion script on sentiment output...');
-      const convertScriptPath = path.join(__dirname, '../scrapper_and_analysis/convert_to_coin_data.py');
+    // 2) Run conversion script to process sentiment.json into public/coin-data.json
+    console.log('🔄 Running conversion script on sentiment output...');
+    const convertScriptPath = path.join(__dirname, '../scrapper_and_analysis/convert_to_coin_data.py');
 
-      const convertProcess = spawn('python3', [convertScriptPath], {
-        cwd: path.join(__dirname, '../scrapper_and_analysis'),
-        env: { ...process.env }
-      });
+    const convertProcess = spawn('python3', ['-u', convertScriptPath], {
+      cwd: path.join(__dirname, '../scrapper_and_analysis'),
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
 
       convertProcess.stdout.on('data', (data) => {
         const msg = data.toString();

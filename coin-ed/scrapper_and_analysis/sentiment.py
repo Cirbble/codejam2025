@@ -117,17 +117,17 @@ def process_posts(input_file, output_file):
     input_path = os.path.join(script_dir, input_file)
     output_path = os.path.join(script_dir, output_file)
 
-    print(f"\n{'='*60}")
-    print(f"🧠 SENTIMENT ANALYSIS STARTING")
-    print(f"{'='*60}")
-    print(f"📂 Input file: {input_path}")
-    print(f"📂 Output file: {output_path}")
+    print(f"\n{'='*60}", flush=True)
+    print(f"🧠 SENTIMENT ANALYSIS STARTING", flush=True)
+    print(f"{'='*60}", flush=True)
+    print(f"📂 Input file: {input_path}", flush=True)
+    print(f"📂 Output file: {output_path}", flush=True)
 
     # Read input JSON
     with open(input_path, 'r', encoding='utf-8') as f:
         posts = json.load(f)
 
-    print(f"📊 Total posts loaded: {len(posts)}")
+    print(f"📊 Total posts loaded: {len(posts)}", flush=True)
 
     processed_posts = []
     skipped_count = 0
@@ -137,13 +137,13 @@ def process_posts(input_file, output_file):
         # Skip posts where token_name is null
         if post.get('token_name') is None or post.get('token_name') == 'null':
             skipped_count += 1
-            print(f"⏭️  Skipping post {idx}/{len(posts)} (ID: {post.get('id')}) - No token name")
+            print(f"⏭️  Skipping post {idx}/{len(posts)} (ID: {post.get('id')}) - No token name", flush=True)
             continue
 
         token_name = post.get('token_name', 'UNKNOWN')
         tokens_found.add(token_name)
 
-        print(f"🔍 Processing post {idx}/{len(posts)} - Token: {token_name}")
+        print(f"🔍 Processing post {idx}/{len(posts)} - Token: {token_name}", flush=True)
 
         # Analyze title sentiment
         title_sentiment = analyze_sentiment(post.get('title', ''))
@@ -182,8 +182,8 @@ def process_posts(input_file, output_file):
 
         comments_avg = sum(comment_sentiments) / len(comment_sentiments) if comment_sentiments else 0
 
-        print(f"   💬 Comments analyzed: {len(comment_sentiments)}")
-        print(f"   📈 Raw sentiment: {post['raw_sentiment_score']}")
+        print(f"   💬 Comments analyzed: {len(comment_sentiments)}", flush=True)
+        print(f"   📈 Raw sentiment: {post['raw_sentiment_score']}", flush=True)
 
         # Get engagement metrics
         platform = post.get('platform', '')
@@ -208,8 +208,8 @@ def process_posts(input_file, output_file):
             upvotes, comment_count, shares_or_awards
         )
 
-        print(f"   ✅ Aggregate sentiment: {post['aggregate_sentiment_score']}")
-        print(f"   ✅ Engagement score: {post['engagement_score']}")
+        print(f"   ✅ Aggregate sentiment: {post['aggregate_sentiment_score']}", flush=True)
+        print(f"   ✅ Engagement score: {post['engagement_score']}", flush=True)
 
         processed_posts.append(post)
 
@@ -217,15 +217,15 @@ def process_posts(input_file, output_file):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(processed_posts, f, indent=2, ensure_ascii=False)
 
-    print(f"\n{'='*60}")
-    print(f"✅ SENTIMENT ANALYSIS COMPLETE")
-    print(f"{'='*60}")
-    print(f"📂 Output: {output_path}")
-    print(f"📊 Total posts processed: {len(processed_posts)}")
-    print(f"⏭️  Posts skipped (no token): {skipped_count}")
-    print(f"🪙 Unique tokens found: {len(tokens_found)}")
-    print(f"   Tokens: {', '.join(sorted(tokens_found))}")
-    print(f"{'='*60}\n")
+    print(f"\n{'='*60}", flush=True)
+    print(f"✅ SENTIMENT ANALYSIS COMPLETE", flush=True)
+    print(f"{'='*60}", flush=True)
+    print(f"📂 Output: {output_path}", flush=True)
+    print(f"📊 Total posts processed: {len(processed_posts)}", flush=True)
+    print(f"⏭️  Posts skipped (no token): {skipped_count}", flush=True)
+    print(f"🪙 Unique tokens found: {len(tokens_found)}", flush=True)
+    print(f"   Tokens: {', '.join(sorted(tokens_found))}", flush=True)
+    print(f"{'='*60}\n", flush=True)
 
 if __name__ == "__main__":
     input_file = "scraped_posts.json"
