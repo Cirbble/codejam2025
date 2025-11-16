@@ -619,25 +619,18 @@ class RedditScraper:
         try:
             self.client.navigate(post_url, wait_time=3)
             
-            # Ensure Playwright is connected
-            self.client.ensure_playwright_connected()
+            # Wait at least 1 second for the post page to fully load before scraping comments
+            print(f"  ⏳ Waiting 1s for post page to load...")
+            time.sleep(1)
             
-            # Explicitly wait for comment elements to appear (Reddit loads them dynamically)
-            import time
+            # Wait for comments to actually appear on the page
             try:
-                # Wait for at least one comment element to appear, with timeout
-                self.client.page.wait_for_selector('shreddit-comment', timeout=10000, state='attached')
-                print(f"  ✅ Comments loaded, waiting 2s for full render...")
-                time.sleep(2)  # Additional wait for comment content to fully render
-            except Exception as e:
-                # If no comments found, wait a bit more and try again
-                print(f"  ⏳ No comments found immediately, waiting 3s...")
-                time.sleep(3)
-                # Check if comments exist now
-                comment_count = self.client.page.evaluate("document.querySelectorAll('shreddit-comment').length")
-                if comment_count == 0:
-                    print(f"  ⚠️ No comments found on this post")
-                    return []
+                self.client.page.wait_for_selector('shreddit-comment', timeout=5000, state='attached')
+                print(f"  ✅ Comments loaded")
+            except Exception:
+                # Fallback: wait a bit more if selector doesn't appear
+                print(f"  ⏳ Comments not immediately visible, waiting 2s more...")
+                time.sleep(2)
             
             script = f"""
             (function() {{
@@ -645,42 +638,18 @@ class RedditScraper:
                 // Reddit uses shreddit-comment elements
                 const commentElements = document.querySelectorAll('shreddit-comment');
                 
-                console.log('Found', commentElements.length, 'comment elements');
-                
                 for (let i = 0; i < Math.min({limit}, commentElements.length); i++) {{
                     const comment = commentElements[i];
-                    
-                    // Try multiple selectors for comment content
-                    let commentContent = comment.querySelector('[slot="comment"]');
-                    if (!commentContent) {{
-                        commentContent = comment.querySelector('[id*="-comment-rtjson-content"]');
-                    }}
-                    if (!commentContent) {{
-                        commentContent = comment.querySelector('.md');
-                    }}
-                    if (!commentContent) {{
-                        // Try getting text directly from the comment element
-                        commentContent = comment.querySelector('p, div[class*="comment"]');
-                    }}
-                    if (!commentContent) {{
-                        // Last resort: get all text from the comment element
-                        const allText = comment.textContent || comment.innerText || '';
-                        if (allText.trim().length > 3) {{
-                            comments.push(allText.trim());
-                            continue;
-                        }}
-                    }}
-                    
+                    // Comments are in div with slot="comment" or id ending in -comment-rtjson-content
+                    const commentContent = comment.querySelector('[slot="comment"], [id*="-comment-rtjson-content"], .md');
                     if (commentContent) {{
-                        const text = commentContent.textContent || commentContent.innerText || '';
-                        const trimmed = text.trim();
-                        if (trimmed && trimmed.length > 3) {{
-                            comments.push(trimmed);
+                        const text = commentContent.textContent.trim();
+                        if (text && text.length > 3) {{
+                            comments.push(text);
                         }}
                     }}
                 }}
                 
-                console.log('Extracted', comments.length, 'comments');
                 return comments;
             }})();
             """
@@ -688,12 +657,6 @@ class RedditScraper:
             # execute_script now has retry logic for execution context errors
             result = self.client.execute_script(script, retries=2)
             comments = result if isinstance(result, list) else result.get("result", []) if isinstance(result, dict) else []
-            
-            if comments:
-                print(f"  ✅ Scraped {len(comments)} comments")
-            else:
-                print(f"  ⚠️ No comments extracted (found elements but couldn't get text)")
-            
             return comments[:limit] if comments else []
         except Exception as e:
             error_msg = str(e)
