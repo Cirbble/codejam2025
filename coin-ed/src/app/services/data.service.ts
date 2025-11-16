@@ -1,6 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { Coin, Portfolio, SentimentData, AgentControls, PortfolioCoin } from '../models/coin.model';
 import { PumpPortalService } from './pump-portal';
+import { ScraperService } from './scraper.service';
 import { getTokenAddress } from '../config/token-addresses';
 
 @Injectable({
@@ -8,6 +9,7 @@ import { getTokenAddress } from '../config/token-addresses';
 })
 export class DataService {
   private pumpPortal = inject(PumpPortalService);
+  private scraperService = inject(ScraperService);
 
   // Signals for reactive state management
   coins = signal<Coin[]>([]);
@@ -22,6 +24,41 @@ export class DataService {
   constructor() {
     // Load data from coin-data.json
     this.loadCoinData();
+
+    // Subscribe to live scraper updates
+    this.scraperService.scraperData$.subscribe(posts => {
+      if (posts && posts.length > 0) {
+        console.log(`📨 Received ${posts.length} posts from scraper`);
+      }
+    });
+
+    // Subscribe to scraper status
+    this.scraperService.scraperStatus$.subscribe(status => {
+      const currentControls = this.agentControls();
+      if (currentControls.scraperEnabled !== status.running) {
+        this.agentControls.set({
+          ...currentControls,
+          scraperEnabled: status.running
+        });
+      }
+    });
+
+    // Listen for coin-data-updated custom event dispatched by ScraperService
+    if (typeof window !== 'undefined') {
+      window.addEventListener('coin-data-updated', () => {
+        console.log('🔄 Reloading coin data after coin_data_updated event');
+        this.loadCoinData();
+      });
+    }
+
+    // Optional fallback: if logs contain completion phrase
+    this.scraperService.scraperLogs$.subscribe(logs => {
+      const lastLog = logs[logs.length - 1];
+      if (lastLog && /Coin data updated/gi.test(lastLog)) {
+        console.log('🔄 Reloading coin data triggered from log fallback');
+        this.loadCoinData();
+      }
+    });
   }
 
   /**
@@ -154,9 +191,23 @@ export class DataService {
   /**
    * Toggle agent controls
    */
-  toggleScraper(): void {
+  async toggleScraper(): Promise<void> {
     const current = this.agentControls();
-    this.agentControls.set({ ...current, scraperEnabled: !current.scraperEnabled });
+    const newState = !current.scraperEnabled;
+
+    if (newState) {
+      // Start the scraper
+      const success = await this.scraperService.startScraper();
+      if (success) {
+        this.agentControls.set({ ...current, scraperEnabled: true });
+      }
+    } else {
+      // Stop the scraper
+      const success = await this.scraperService.stopScraper();
+      if (success) {
+        this.agentControls.set({ ...current, scraperEnabled: false, buyerEnabled: false, sellerEnabled: false });
+      }
+    }
   }
 
   toggleBuyer(): void {
@@ -174,9 +225,10 @@ export class DataService {
    */
   private async loadCoinData(): Promise<void> {
     try {
-      // Use relative path that works in both browser and SSR
+      // Use relative path that works in both browser and SSR, add cache-busting
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200';
-      const response = await fetch(`${baseUrl}/coin-data.json`);
+      const ts = Date.now();
+      const response = await fetch(`${baseUrl}/coin-data.json?ts=${ts}`, { cache: 'no-store' });
 
       if (!response.ok) {
         throw new Error(`Failed to load coin data: ${response.status} ${response.statusText}`);
@@ -310,4 +362,3 @@ export class DataService {
     });
   }
 }
-

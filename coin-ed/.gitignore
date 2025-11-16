@@ -49,3 +49,8 @@ Thumbs.db
 *.env
 scrapper_and_analysis/.env
 
+# Scraped data files (large, regenerated on each run)
+scrapper_and_analysis/scraped_posts.json
+scrapper_and_analysis/sentiment.json
+public/coin-data.json
+backend/*.log

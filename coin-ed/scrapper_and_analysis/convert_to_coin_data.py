@@ -368,6 +368,13 @@ def convert_sentiment_to_coin_data(input_file, output_file):
     input_path = os.path.join(script_dir, input_file)
     output_path = os.path.join(script_dir, '..', 'public', output_file)
 
+    # Ensure parent output directory exists and clear previous file
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    try:
+      open(output_path, 'w').close()
+    except Exception:
+      pass
+
     # Read sentiment data
     with open(input_path, 'r', encoding='utf-8') as f:
         sentiment_data = json.load(f)
@@ -517,14 +524,14 @@ def convert_sentiment_to_coin_data(input_file, output_file):
     # Sort by aggregate sentiment score (highest first)
     coin_data.sort(key=lambda x: x['aggregate_sentiment_score'], reverse=True)
 
-    # Write to output file
+    # Write final coin data (overwrite)
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(coin_data, f, indent=2, ensure_ascii=False)
 
     print(f"\n=== Conversion Complete ===")
-    print(f"Total unique coins: {len(coin_data)}")
-    print(f"Total posts processed: {len(sentiment_data)}")
-    print(f"Posts combined: {len(sentiment_data) - len(coin_data)}")
+    print(f"Input (sentiment): {input_path}")
+    print(f"Output (coin-data): {output_path}")
+    print(f"Coins written: {len(coin_data)}")
 
     # Count tokens found vs not found
     found_count = sum(1 for c in coin_data if c['address'] != 'N/A')

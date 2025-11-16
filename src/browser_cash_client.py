@@ -41,13 +41,16 @@ class BrowserCashClient:
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
     
-    def start_session(self) -> str:
-        """Start a new browser session.
-        
+    def start_session(self, max_retries: int = 5) -> str:
+        """Start a new browser session with retry logic.
+
         Note: The browser runs on Browser Cash's servers and should be in headful
         (visible) mode by default. Browser visibility is controlled by Browser Cash's
         server configuration.
         
+        Args:
+            max_retries: Maximum number of retry attempts (default: 5)
+
         Returns:
             Session ID for the created session.
         """
@@ -59,56 +62,109 @@ class BrowserCashClient:
                 print(f"⚠️ Warning: Could not stop existing session: {e}")
         
         url = f"{self.base_url}/session"
-        response = requests.post(url, headers=self.headers, json={})
-        
-        # Debug: Print response details
-        print(f"🔍 API Response Status: {response.status_code}")
-        print(f"🔍 API Response Headers: {dict(response.headers)}")
-        
-        # Handle session limit error
-        if response.status_code == 403:
-            error_data = response.json() if response.text else {}
-            error_msg = response.text.lower()
-            if "limit" in error_msg or "limit" in str(error_data).lower():
-                print(f"⚠️ Session limit reached!")
-                print(f"💡 Please check Browser Cash dashboard and manually stop any running sessions.")
-                print(f"💡 Or wait a few minutes for sessions to timeout.")
-                raise Exception("Session limit reached. Please stop existing sessions in Browser Cash dashboard or wait for them to timeout.")
-        
-        # Accept both 200 and 201 (Created) as success
-        if response.status_code not in [200, 201]:
-            print(f"❌ Error Response: {response.text}")
-            response.raise_for_status()
-        
-        try:
-            data = response.json()
-            print(f"🔍 API Response Data: {data}")
-        except Exception as e:
-            print(f"❌ Failed to parse JSON: {e}")
-            print(f"❌ Response Text: {response.text}")
-            raise
-        
-        # Try different possible response formats
-        self.session_id = (
-            data.get("id") or 
-            data.get("session_id") or 
-            data.get("sessionId") or
-            data.get("data", {}).get("id") or
-            data.get("data", {}).get("session_id")
-        )
-        
-        if not self.session_id:
-            print(f"❌ Full response structure: {json.dumps(data, indent=2)}")
-            raise ValueError(f"Failed to get session ID from response. Response keys: {list(data.keys())}")
-        
-        self.session_data = data
-        print(f"✅ Browser session started: {self.session_id}")
-        
-        # Wait for session to become active
-        self.wait_for_active()
-        
-        return self.session_id
-    
+        last_error = None
+
+        # Retry loop with exponential backoff
+        for attempt in range(max_retries):
+            try:
+                print(f"🔄 Attempting to connect to Browser Cash API (attempt {attempt + 1}/{max_retries})...")
+
+                # Use a new session with connection pooling for better reliability
+                session = requests.Session()
+                adapter = requests.adapters.HTTPAdapter(
+                    max_retries=requests.adapters.Retry(
+                        total=3,
+                        backoff_factor=0.5,
+                        status_forcelist=[500, 502, 503, 504]
+                    )
+                )
+                session.mount('https://', adapter)
+                session.mount('http://', adapter)
+
+                response = session.post(
+                    url,
+                    headers=self.headers,
+                    json={},
+                    timeout=30  # 30 second timeout
+                )
+
+                # Debug: Print response details
+                print(f"🔍 API Response Status: {response.status_code}")
+
+                # Handle session limit error
+                if response.status_code == 403:
+                    error_data = response.json() if response.text else {}
+                    error_msg = response.text.lower()
+                    if "limit" in error_msg or "limit" in str(error_data).lower():
+                        print(f"⚠️ Session limit reached!")
+                        print(f"💡 Please check Browser Cash dashboard and manually stop any running sessions.")
+                        print(f"💡 Or wait a few minutes for sessions to timeout.")
+                        raise Exception("Session limit reached. Please stop existing sessions in Browser Cash dashboard or wait for them to timeout.")
+
+                # Accept both 200 and 201 (Created) as success
+                if response.status_code not in [200, 201]:
+                    print(f"❌ Error Response: {response.text}")
+                    response.raise_for_status()
+
+                data = response.json()
+                print(f"🔍 API Response Data: {data}")
+
+                # Try different possible response formats
+                self.session_id = (
+                    data.get("id") or
+                    data.get("session_id") or
+                    data.get("sessionId") or
+                    data.get("data", {}).get("id") or
+                    data.get("data", {}).get("session_id")
+                )
+
+                if not self.session_id:
+                    print(f"❌ Full response structure: {json.dumps(data, indent=2)}")
+                    raise ValueError(f"Failed to get session ID from response. Response keys: {list(data.keys())}")
+
+                self.session_data = data
+                print(f"✅ Browser session started: {self.session_id}")
+
+                # Wait for session to become active
+                self.wait_for_active()
+
+                return self.session_id
+
+            except (requests.exceptions.ConnectionError, ConnectionResetError) as e:
+                last_error = e
+                wait_time = min(2 ** attempt, 16)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s max
+                print(f"⚠️ Connection error: {type(e).__name__}: {e}")
+
+                if attempt < max_retries - 1:
+                    print(f"🔄 Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"❌ Failed after {max_retries} attempts")
+                    print(f"💡 Troubleshooting:")
+                    print(f"   1. Check your internet connection")
+                    print(f"   2. Verify Browser Cash API key in .env is correct")
+                    print(f"   3. Check Browser Cash service status")
+                    print(f"   4. Try again in a few minutes")
+                    raise Exception(f"Failed to connect to Browser Cash API after {max_retries} attempts. Last error: {last_error}")
+
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                print(f"⚠️ Request timeout: {e}")
+
+                if attempt < max_retries - 1:
+                    wait_time = min(2 ** attempt, 16)
+                    print(f"🔄 Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    raise Exception(f"Browser Cash API timeout after {max_retries} attempts")
+
+            except Exception as e:
+                print(f"❌ Unexpected error: {type(e).__name__}: {e}")
+                raise
+
+        # Should never reach here, but just in case
+        raise Exception(f"Failed to start session after {max_retries} attempts. Last error: {last_error}")
+
     def wait_for_active(self, timeout_ms: int = 20000) -> Dict[str, Any]:
         """Wait for the session to become active.
         

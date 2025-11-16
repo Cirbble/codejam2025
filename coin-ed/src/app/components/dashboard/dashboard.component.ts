@@ -5,8 +5,8 @@ import { DataService } from '../../services/data.service';
 import { DataLoaderService } from '../../services/data-loader.service';
 import { ControlPanelComponent } from '../control-panel/control-panel.component';
 import { CoinCardComponent } from '../coin-card/coin-card.component';
-import { PortfolioComponent } from '../portfolio/portfolio.component';
 import { PostDisplayComponent } from '../post-display/post-display';
+import { ScraperLogsComponent } from '../scraper-logs/scraper-logs.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -15,8 +15,8 @@ import { PostDisplayComponent } from '../post-display/post-display';
     CommonModule,
     ControlPanelComponent,
     CoinCardComponent,
-    PortfolioComponent,
-    PostDisplayComponent
+    PostDisplayComponent,
+    ScraperLogsComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']

@@ -388,10 +388,6 @@
   margin: 0;
 }
 
-.portfolio-section {
-  max-width: 500px;
-  margin: 0 auto;
-}
 
 @media (max-width: 1024px) {
   .coins-grid {
