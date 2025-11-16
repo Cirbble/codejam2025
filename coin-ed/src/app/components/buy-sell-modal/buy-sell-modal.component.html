@@ -3,55 +3,20 @@
     <div class="modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>{{ agentType() === 'buyer' ? 'AI Buyer' : 'AI Seller' }} Agent</h2>
-        @if (!showSuccess()) {
-          <button class="close-btn" (click)="closeModal()">×</button>
-        }
+        <button class="close-btn" (click)="closeModal()">×</button>
       </div>
 
       <div class="modal-body">
-        @if (!showSuccess()) {
-          <p class="instruction">{{ agentType() === 'buyer' ? 'AI Buyer' : 'AI Seller' }} agent will execute a {{ agentType() === 'buyer' ? 'buy' : 'sell' }} order:</p>
-          
-          @if (generatedMessage()) {
-            <div class="message-container">
-              <div class="message-header">
-                <span class="message-icon">🤖</span>
-                <span class="message-title">Agent Message</span>
-              </div>
-              <div class="message-content">
-                {{ generatedMessage() }}
-              </div>
-            </div>
-          }
-        }
-
-        @if (showSuccess()) {
-          <div class="success-container">
-            <button class="success-close-btn" (click)="closeModal()">×</button>
-            <div class="success-title">{{ selectedAction() === 'buy' ? 'Successfully bought!' : 'Successfully sold!' }}</div>
-            <div class="currencies-list">
-              <div class="currencies-label">Currencies:</div>
-              <div class="currencies-items">
-                @for (currency of currencies(); track currency) {
-                  @if (isCurrencyVisible(currency)) {
-                    <span class="currency-badge">{{ currency }}</span>
-                  }
-                }
-              </div>
-            </div>
-          </div>
-        }
+        <p class="instruction">{{ agentType() === 'buyer' ? 'This will now authorize the AI to execute buy orders automatically' : 'This will now authorize the AI to execute sell orders automatically' }}</p>
       </div>
 
       <div class="modal-footer">
-        @if (!showSuccess()) {
-          @if (selectedAction()) {
-            <button class="confirm-btn" (click)="confirmAction()">
-              Confirm {{ selectedAction() === 'buy' ? 'Buy' : 'Sell' }} Action
-            </button>
-          }
-          <button class="cancel-btn" (click)="closeModal()">Cancel</button>
+        @if (selectedAction()) {
+          <button class="confirm-btn" (click)="confirmAction()">
+            Confirm {{ selectedAction() === 'buy' ? 'Buy' : 'Sell' }} Action
+          </button>
         }
+        <button class="cancel-btn" (click)="closeModal()">Cancel</button>
       </div>
     </div>
   </div>

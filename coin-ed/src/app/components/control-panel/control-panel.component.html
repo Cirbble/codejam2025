@@ -70,6 +70,9 @@
 
 <app-buy-sell-modal 
   #buySellModal
-  (actionSelected)="onActionSelected($event)">
+  (actionConfirmed)="onActionConfirmed($event)"
+  (close)="onModalClosed()">
 </app-buy-sell-modal>
+
+<app-notification #notificationComponent></app-notification>
 

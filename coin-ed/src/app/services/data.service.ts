@@ -18,6 +18,9 @@ export class DataService {
     buyerEnabled: false,
     sellerEnabled: false
   });
+  
+  // Track purchased coins to prevent duplicate buys
+  private purchasedCoins = new Set<string>();
 
   constructor() {
     // Load data from coin-data.json
@@ -158,7 +161,7 @@ export class DataService {
       const response = await fetch('/coin-data.json');
       const coinDataArray = await response.json();
       
-      const coins: Coin[] = coinDataArray.map((item: any) => ({
+      const coins: any[] = coinDataArray.map((item: any) => ({
         id: item.id,
         name: item.name,
         symbol: item.symbol,
@@ -171,11 +174,15 @@ export class DataService {
         hype: item.raw_sentiment_score,
         communityHype: item.aggregate_sentiment_score,
         popularity: item.engagement_score,
-        latestPost: this.extractPostData(item)
+        latestPost: this.extractPostData(item),
+        // Include additional fields from coin-data.json
+        recommendation: item.recommendation,
+        confidence: item.confidence
       }));
 
       this.coins.set(coins);
       this.updatePortfolio();
+      console.log('Loaded coins with recommendations:', coins.filter(c => c.recommendation === 'BUY').length);
     } catch (error) {
       console.error('Error loading coin data:', error);
       // Fallback to empty array if file can't be loaded
@@ -276,6 +283,40 @@ export class DataService {
     coins.forEach(coin => {
       this.fetchPumpPortalPrice(coin.symbol);
     });
+  }
+
+  /**
+   * Get coins with BUY recommendation that haven't been purchased yet
+   */
+  getBuyRecommendedCoins(): any[] {
+    const allCoins = this.coins();
+    console.log('All coins:', allCoins.length);
+    console.log('Sample coin:', allCoins[0]);
+    
+    const buyCoins = allCoins.filter(coin => {
+      const coinData = coin as any;
+      const hasBuyRec = coinData.recommendation === 'BUY';
+      const notPurchased = !this.purchasedCoins.has(coin.id);
+      console.log(`Coin ${coin.name}: recommendation=${coinData.recommendation}, purchased=${!notPurchased}`);
+      return hasBuyRec && notPurchased;
+    });
+    
+    console.log('Buy recommended coins:', buyCoins.length);
+    return buyCoins;
+  }
+
+  /**
+   * Mark a coin as purchased to prevent duplicate buys
+   */
+  markCoinAsPurchased(coinId: string): void {
+    this.purchasedCoins.add(coinId);
+  }
+
+  /**
+   * Reset purchased coins (useful when restarting the agent)
+   */
+  resetPurchasedCoins(): void {
+    this.purchasedCoins.clear();
   }
 }
 
