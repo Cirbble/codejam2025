@@ -82,18 +82,20 @@ export class BuySellModalComponent {
         action: action
       });
       
-      // Show success message
-      this.showSuccess.set(true);
-      this.successMessage.set(
-        action === 'buy' 
-          ? '✅ Successfully bought!' 
-          : '✅ Successfully sold!'
-      );
-      
-      // Close modal after showing success message
+      // Wait a bit before showing success message
       setTimeout(() => {
-        this.closeModal();
-      }, 2000);
+        this.showSuccess.set(true);
+        this.successMessage.set(
+          action === 'buy' 
+            ? '✅ Successfully bought!' 
+            : '✅ Successfully sold!'
+        );
+        
+        // Close modal after showing success message
+        setTimeout(() => {
+          this.closeModal();
+        }, 2000);
+      }, 1500);
     }
   }
 }
