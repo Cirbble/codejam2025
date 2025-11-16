@@ -33,7 +33,9 @@
               <div class="currencies-label">Currencies:</div>
               <div class="currencies-items">
                 @for (currency of currencies(); track currency) {
-                  <span class="currency-badge">{{ currency }}</span>
+                  @if (isCurrencyVisible(currency)) {
+                    <span class="currency-badge">{{ currency }}</span>
+                  }
                 }
               </div>
             </div>

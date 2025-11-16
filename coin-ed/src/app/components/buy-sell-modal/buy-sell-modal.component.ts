@@ -19,6 +19,7 @@ export class BuySellModalComponent {
   successMessage = signal<string>('');
   showSuccess = signal(false);
   currencies = signal<string[]>([]);
+  visibleCurrencies = signal<Set<string>>(new Set());
 
   close = output<void>();
   actionSelected = output<{ agentType: AgentType; action: ActionType }>();
@@ -30,6 +31,7 @@ export class BuySellModalComponent {
     this.successMessage.set('');
     this.showSuccess.set(false);
     this.currencies.set([]);
+    this.visibleCurrencies.set(new Set());
     this.isOpen.set(true);
     
     // Auto-select the action based on agent type
@@ -44,6 +46,7 @@ export class BuySellModalComponent {
     this.successMessage.set('');
     this.showSuccess.set(false);
     this.currencies.set([]);
+    this.visibleCurrencies.set(new Set());
     this.close.emit();
   }
 
@@ -88,6 +91,24 @@ export class BuySellModalComponent {
     }
   }
 
+  private showCurrenciesWithDelay(currencies: string[]): void {
+    // Show each currency with a random delay between 200-800ms
+    currencies.forEach((currency, index) => {
+      const randomDelay = Math.floor(Math.random() * 600) + 200; // 200-800ms
+      const cumulativeDelay = index * randomDelay;
+      
+      setTimeout(() => {
+        const current = new Set(this.visibleCurrencies());
+        current.add(currency);
+        this.visibleCurrencies.set(current);
+      }, cumulativeDelay);
+    });
+  }
+
+  isCurrencyVisible(currency: string): boolean {
+    return this.visibleCurrencies().has(currency);
+  }
+
   confirmAction(): void {
     if (this.selectedAction()) {
       const action = this.selectedAction()!;
@@ -104,6 +125,8 @@ export class BuySellModalComponent {
       // Wait a bit before showing success message
       setTimeout(() => {
         this.showSuccess.set(true);
+        // Start showing currencies one by one with random delays
+        this.showCurrenciesWithDelay(selectedCurrencies);
       }, 2000);
     }
   }
