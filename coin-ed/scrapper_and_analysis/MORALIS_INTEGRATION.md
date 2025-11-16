@@ -1,31 +1,68 @@
-# Moralis API Integration Guide
+# Moralis API Integration Guide - Solana Edition
 
 ## Overview
-The `convert_to_coin_data.py` script now integrates with Moralis Web3 Data API to fetch real-time token metadata including:
-- ✅ Token contract address
-- ✅ Current price in USD
+The `convert_to_coin_data.py` script integrates with **Moralis Web3 Data API** and **DexScreener API** to fetch real-time Solana token metadata including:
+- ✅ Token contract address (Solana mint address)
+- ✅ Current price in USD (from Solana DEXs)
 - ✅ 24-hour price change
 - ✅ Token logo/image
 - ✅ Token decimals
-- ✅ Blockchain chain information
+- ✅ Liquidity data
+- ✅ DEX information
+
+## 🔑 API Key Setup
+
+### Step 1: Create .env File
+
+```bash
+cd coin-ed/scrapper_and_analysis
+cp .env.example .env
+```
+
+### Step 2: Add Your Moralis API Key
+
+Edit `.env` and add your key:
+```bash
+MORALIS_API_KEY=your_actual_api_key_here
+```
+
+**Get your API key from:** https://admin.moralis.io/
+
+### Step 3: Never Commit .env
+
+The `.env` file is already in `.gitignore` - it will NEVER be pushed to GitHub.
+**Only commit `.env.example`** which doesn't contain secrets.
 
 ## Features Added
 
-### 1. Automatic Token Lookup
-The script automatically searches for each token mentioned in sentiment analysis across multiple blockchains:
-- Ethereum (0x1)
-- Binance Smart Chain (0x38)
-- Polygon (0x89)
-- Solana (experimental support)
+### 1. Solana-First Search Strategy
+The script **prioritizes Solana** since most meme coins are on Solana:
+1. Searches Solana first using DexScreener API
+2. Falls back to Moralis Solana API if needed  
+3. If not found, tries Ethereum, BSC, and Polygon
 
-### 2. Real Price Data
-Instead of using default prices, the script fetches:
-- Current USD price
-- 24-hour percentage change
-- Calculated balance based on $1000 portfolio value
+### 2. DexScreener Integration (Primary)
+- **Free API** - No key needed
+- **Excellent Solana coverage** - Aggregates all Solana DEXs
+- **Real-time prices** from Raydium, Orca, Jupiter, etc.
+- **Token logos** and metadata
+- **Liquidity data** to ensure valid tokens
 
-### 3. Token Logos
-Fetches official token logos from Moralis when available for display in the frontend.
+### 3. Moralis as Fallback
+- Used if DexScreener doesn't find the token
+- Supports both Solana and EVM chains
+- Requires API key (stored in .env)
+
+## Supported Chains
+
+According to Moralis documentation:
+
+| Chain | ID | Support Level |
+|-------|----|----|
+| **Solana Mainnet** | `solana` | ✅ PRIMARY (via DexScreener + Moralis) |
+| Ethereum | `0x1` | ✅ Fallback |
+| BSC | `0x38` | ✅ Fallback |
+| Polygon | `0x89` | ✅ Fallback |
 
 ## Output Format
 
@@ -54,43 +91,63 @@ The enhanced `coin-data.json` now includes:
 
 ## Usage
 
-### Basic Usage
+### Setup (First Time Only)
+
+1. **Install dependencies:**
+   ```bash
+   pip3 install requests python-dotenv
+   ```
+
+2. **Create .env file:**
+   ```bash
+   cd coin-ed/scrapper_and_analysis
+   cp .env.example .env
+   ```
+
+3. **Add your Moralis API key to .env:**
+   ```bash
+   MORALIS_API_KEY=your_key_here
+   ```
+
+### Running the Script
+
 ```bash
 cd coin-ed/scrapper_and_analysis
 python3 convert_to_coin_data.py
 ```
 
 ### What Happens
-1. Script reads `sentiment.json`
-2. For each token found:
-   - Searches Ethereum mainnet
-   - If not found, tries BSC
-   - If not found, tries Polygon
-   - If not found, tries Solana
-3. Fetches token metadata and price
-4. Combines with sentiment data
-5. Outputs to `public/coin-data.json`
+1. Script reads `.env` file for API key
+2. Reads `sentiment.json` with token mentions
+3. For each token:
+   - **First**: Searches Solana via DexScreener (free, no key needed)
+   - **Then**: Tries Moralis Solana API (if DexScreener fails)
+   - **Fallback**: Tries Ethereum, BSC, Polygon
+4. Fetches token metadata, price, and logo
+5. Combines with sentiment data
+6. Outputs to `public/coin-data.json`
 
 ### Output Example
 ```
 === Fetching Token Metadata from Moralis ===
 
-Processing: HEGE
-  Searching for HEGE on chain 0x1...
-  ✓ Found: Hedgehog in the fog at $0.00000123
-  ✓ Logo: https://cdn.moralis.io/...
+Processing: PAWS
+  Searching for PAWS on Solana via DexScreener...
+  ✓ Found: PAWS on Solana at $0.00002600
+  ✓ Logo: https://cdn.dexscreener.com/...
 
 Processing: KENDU
-  Searching for KENDU on chain 0x1...
-  Searching for KENDU on chain 0x38...
-  ✗ Not found in Moralis - using defaults
+  Searching for KENDU on Solana via DexScreener...
+  ✓ Found: Kendu on Solana at $0.00014000
 
 === Conversion Complete ===
 Total unique coins: 14
-Tokens found on-chain: 3/14
+Tokens found on-chain: 12/14 ✅
 
 Top 5 coins by sentiment:
-1. HEGE: Sentiment 0.832 | Confidence: 74% | BUY | Price: $0.00000123 | Address: 0x1234...
+1. PAWS: Sentiment 1.0 | Confidence: 87% | BUY | 
+   Price: $0.00002600 | Address: PAWSxhjT...Vgn6ZQ
+   Logo: ✓
 ```
 
 ## API Details

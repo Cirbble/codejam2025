@@ -3,32 +3,37 @@ import os
 import requests
 import time
 from typing import Dict, Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Moralis API Configuration
-MORALIS_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjY0YjRjNDBjLTNmNTktNGNmMy05ZDRiLTIxNDQxNTUwNDE4ZiIsIm9yZ0lkIjoiNDgxNTg5IiwidXNlcklkIjoiNDk1NDU3IiwidHlwZSI6IlBST0pFQ1QiLCJ0eXBlSWQiOiJlNmY4MWEwOS1iOTNiLTQ1ZGEtYmUwNC0yZDcwMDNmYmJlMmYiLCJpYXQiOjE3NjMyNTAzNjksImV4cCI6NDkxOTAxMDM2OX0.th7aW4mRImwelj-l_rAQJSMsG-B0LiTLdvVW53j0rfo"
-MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
+MORALIS_API_KEY = os.getenv('MORALIS_API_KEY')
+if not MORALIS_API_KEY:
+    raise ValueError("MORALIS_API_KEY not found in .env file!")
 
-def search_token_by_name(token_name: str, chain: str = "0x1") -> Optional[Dict]:
+MORALIS_BASE_URL = "https://solana-gateway.moralis.io"
+MORALIS_EVM_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
+
+def search_token_by_name(token_name: str, chain: str = "solana") -> Optional[Dict]:
     """
     Search for a token by name using Moralis API.
     Returns token metadata including address, price, and logo.
 
     Args:
         token_name: Name or symbol of the token
-        chain: Chain ID (default: 0x1 for Ethereum mainnet)
-               Other options: 0x89 (Polygon), 0x38 (BSC), 0xa4b1 (Arbitrum), solana (Solana)
+        chain: Chain ID (default: solana for Solana mainnet)
+               Other options: 0x1 (Ethereum), 0x89 (Polygon), 0x38 (BSC)
     """
     try:
-        # For Solana, use different endpoint
+        # For Solana, use Solana-specific endpoint
         if chain == "solana":
-            # Try to get token info for Solana
-            # Note: Moralis Solana API has different structure
-            # We'll search by symbol using the token endpoint
             return search_solana_token(token_name)
 
         # For EVM chains (Ethereum, BSC, Polygon, etc.)
         # First, try to search by symbol
-        search_url = f"{MORALIS_BASE_URL}/erc20/metadata/symbols"
+        search_url = f"{MORALIS_EVM_BASE_URL}/erc20/metadata/symbols"
         headers = {
             "Accept": "application/json",
             "X-API-Key": MORALIS_API_KEY
@@ -64,7 +69,13 @@ def search_token_by_name(token_name: str, chain: str = "0x1") -> Optional[Dict]:
                     }
 
         # If not found on current chain, try other chains
-        if chain == "0x1":
+        # Priority: Solana > Ethereum > BSC > Polygon
+        if chain == "solana":
+            # Try Ethereum
+            eth_result = search_token_by_name(token_name, "0x1")
+            if eth_result:
+                return eth_result
+
             # Try BSC (Binance Smart Chain)
             bsc_result = search_token_by_name(token_name, "0x38")
             if bsc_result:
@@ -75,11 +86,6 @@ def search_token_by_name(token_name: str, chain: str = "0x1") -> Optional[Dict]:
             if polygon_result:
                 return polygon_result
 
-            # Try Solana (most meme coins are on Solana)
-            solana_result = search_token_by_name(token_name, "solana")
-            if solana_result:
-                return solana_result
-
         print(f"  Token {token_name} not found on chain {chain}")
         return None
 
@@ -89,31 +95,138 @@ def search_token_by_name(token_name: str, chain: str = "0x1") -> Optional[Dict]:
 
 def search_solana_token(token_symbol: str) -> Optional[Dict]:
     """
-    Search for a Solana token using Moralis Solana API.
+    Search for a Solana token using DexScreener API (better Solana coverage than Moralis).
+    DexScreener aggregates data from all Solana DEXs.
     """
     try:
-        # Moralis doesn't have great support for searching Solana tokens by symbol
-        # We'll use a workaround by trying common token addresses
-        # For now, return None and let it fall back to defaults
-        # In a production system, you'd integrate with Jupiter or other Solana DEX aggregators
+        print(f"  Searching for {token_symbol} on Solana via DexScreener...")
 
-        print(f"  Searching for {token_symbol} on Solana (limited support)...")
+        # DexScreener API - free, no API key needed, great Solana support
+        search_url = f"https://api.dexscreener.com/latest/dex/search?q={token_symbol}"
+
+        headers = {
+            "Accept": "application/json"
+        }
+
+        response = requests.get(search_url, headers=headers)
+
+        if response.status_code == 200:
+            data = response.json()
+            pairs = data.get('pairs', [])
+
+            # Filter for Solana pairs
+            solana_pairs = [p for p in pairs if p.get('chainId') == 'solana']
+
+            if solana_pairs:
+                # Get the pair with highest liquidity
+                best_pair = max(solana_pairs, key=lambda p: float(p.get('liquidity', {}).get('usd', 0) or 0))
+
+                base_token = best_pair.get('baseToken', {})
+                price_usd = float(best_pair.get('priceUsd', 0))
+                price_change_24h = float(best_pair.get('priceChange', {}).get('h24', 0) or 0)
+
+                return {
+                    'address': base_token.get('address', 'N/A'),
+                    'name': base_token.get('name', token_symbol),
+                    'symbol': base_token.get('symbol', token_symbol),
+                    'decimals': 9,  # Solana standard
+                    'logo': best_pair.get('info', {}).get('imageUrl'),
+                    'thumbnail': best_pair.get('info', {}).get('imageUrl'),
+                    'price_usd': price_usd,
+                    'price_change_24h': price_change_24h,
+                    'chain': 'solana',
+                    'dex': best_pair.get('dexId', 'unknown'),
+                    'liquidity_usd': float(best_pair.get('liquidity', {}).get('usd', 0) or 0)
+                }
+
+        # Fallback: Try Moralis Solana API if DexScreener fails
+        return search_solana_token_moralis(token_symbol)
+
+    except Exception as e:
+        print(f"  Error searching Solana token via DexScreener: {str(e)}")
+        # Try Moralis as fallback
+        return search_solana_token_moralis(token_symbol)
+
+def search_solana_token_moralis(token_symbol: str) -> Optional[Dict]:
+    """
+    Fallback: Search for a Solana token using Moralis Solana API.
+    """
+    try:
+        print(f"  Trying Moralis Solana API for {token_symbol}...")
+
+        # Moralis Solana API endpoint for token metadata
+        search_url = f"{MORALIS_BASE_URL}/token/mainnet/{token_symbol}/metadata"
+
+        headers = {
+            "Accept": "application/json",
+            "X-API-Key": MORALIS_API_KEY
+        }
+
+        response = requests.get(search_url, headers=headers)
+
+        if response.status_code == 200:
+            token_data = response.json()
+
+            if token_data:
+                # Get token price
+                token_address = token_data.get('mint') or token_data.get('address')
+                price_data = None
+
+                if token_address:
+                    price_data = get_solana_token_price(token_address)
+
+                return {
+                    'address': token_address or 'N/A',
+                    'name': token_data.get('name', token_symbol),
+                    'symbol': token_data.get('symbol', token_symbol),
+                    'decimals': token_data.get('decimals', 9),
+                    'logo': token_data.get('logoURI') or token_data.get('logo'),
+                    'thumbnail': token_data.get('thumbnail'),
+                    'price_usd': price_data.get('usdPrice', 0) if price_data else 0,
+                    'price_change_24h': price_data.get('24hrPercentChange', 0) if price_data else 0,
+                    'chain': 'solana'
+                }
+
+        print(f"  Moralis: token {token_symbol} not found on Solana")
         return None
 
     except Exception as e:
-        print(f"  Error searching Solana token: {str(e)}")
+        print(f"  Error with Moralis Solana API: {str(e)}")
+        return None
+
+def get_solana_token_price(token_address: str) -> Optional[Dict]:
+    """
+    Get Solana token price using Moralis Solana API.
+    """
+    try:
+        price_url = f"{MORALIS_BASE_URL}/token/mainnet/{token_address}/price"
+        headers = {
+            "Accept": "application/json",
+            "X-API-Key": MORALIS_API_KEY
+        }
+
+        response = requests.get(price_url, headers=headers)
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"  Failed to get Solana price for {token_address[:10]}...: {response.status_code}")
+            return None
+
+    except Exception as e:
+        print(f"  Error getting Solana token price: {str(e)}")
         return None
 
 def get_token_price(token_address: str, chain: str = "0x1") -> Optional[Dict]:
     """
-    Get current token price using Moralis API.
+    Get current token price using Moralis API for EVM chains.
 
     Args:
         token_address: Contract address of the token
         chain: Chain ID
     """
     try:
-        price_url = f"{MORALIS_BASE_URL}/erc20/{token_address}/price"
+        price_url = f"{MORALIS_EVM_BASE_URL}/erc20/{token_address}/price"
         headers = {
             "Accept": "application/json",
             "X-API-Key": MORALIS_API_KEY
@@ -253,8 +366,11 @@ def convert_sentiment_to_coin_data(input_file, output_file):
             token_logo = token_metadata.get('logo') or token_metadata.get('thumbnail')
             token_decimals = token_metadata.get('decimals', 18)
             price_change_24h = token_metadata.get('price_change_24h', 0)
-            chain_id = token_metadata.get('chain', '0x1')
-            print(f"  ✓ Found: {token_metadata.get('name')} at ${token_price:.8f}")
+            chain_id = token_metadata.get('chain', 'solana')
+
+            # Display chain name instead of ID
+            chain_name = 'Solana' if chain_id == 'solana' else chain_id
+            print(f"  ✓ Found: {token_metadata.get('name')} on {chain_name} at ${token_price:.8f}")
             if token_logo:
                 print(f"  ✓ Logo: {token_logo[:60]}...")
         else:
