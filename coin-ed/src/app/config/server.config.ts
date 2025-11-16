@@ -1,40 +1,72 @@
 /**
  * Server-side configuration loader
- * Reads environment variables from .env file (server-side only)
  *
- * This file should only be used in server-side context (SSR, API routes)
- * For client-side, use the config endpoint or inject during SSR
+ * NOTE: This file is designed for SSR/server-side usage only.
+ * Environment variables are loaded server-side via process.env
+ *
+ * For Angular browser context:
+ * - Create a backend API endpoint to fetch config
+ * - Or manually inject API keys via setApiKey() methods
  */
-
-import { config } from 'dotenv';
-import { join } from 'path';
-
-// Load .env from parent directory (coin-ed/scrapper_and_analysis/.env)
-const envPath = join(process.cwd(), 'scrapper_and_analysis', '.env');
-config({ path: envPath });
-
-// Also try loading from project root
-const rootEnvPath = join(process.cwd(), '..', '.env');
-config({ path: rootEnvPath });
-
-export const serverConfig = {
-  moralisApiKey: process.env['MORALIS_API_KEY'] || '',
-  browserCashApiKey: process.env['BROWSER_CASH_API_KEY'] || '',
-  agentCashApiKey: process.env['AGENT_CASH_API_KEY'] || '',
-  solanaPrivateKey: process.env['SOLANA_PRIVATE_KEY'] || '',
-};
-
-/**
- * Get config value by key
- */
-export function getServerConfig(key: keyof typeof serverConfig): string {
-  return serverConfig[key];
-}
 
 /**
  * Check if running on server
  */
 export function isServer(): boolean {
   return typeof window === 'undefined';
+}
+
+/**
+ * Server configuration interface
+ */
+interface ServerConfig {
+  moralisApiKey: string;
+  browserCashApiKey: string;
+  agentCashApiKey: string;
+  solanaPrivateKey: string;
+}
+
+/**
+ * Get server config (only works server-side)
+ * Returns empty strings if called from browser
+ */
+export function getServerConfig(key: keyof ServerConfig): string {
+  // Only try to access process.env if we're on the server
+  if (!isServer()) {
+    console.warn('getServerConfig() called from browser context - returning empty string');
+    return '';
+  }
+
+  // Server-side only - access process.env
+  const config: ServerConfig = {
+    moralisApiKey: process.env['MORALIS_API_KEY'] || '',
+    browserCashApiKey: process.env['BROWSER_CASH_API_KEY'] || '',
+    agentCashApiKey: process.env['AGENT_CASH_API_KEY'] || '',
+    solanaPrivateKey: process.env['SOLANA_PRIVATE_KEY'] || '',
+  };
+
+  return config[key];
+}
+
+/**
+ * Get all server config (only works server-side)
+ */
+export function getAllServerConfig(): ServerConfig {
+  if (!isServer()) {
+    console.warn('getAllServerConfig() called from browser context - returning empty config');
+    return {
+      moralisApiKey: '',
+      browserCashApiKey: '',
+      agentCashApiKey: '',
+      solanaPrivateKey: '',
+    };
+  }
+
+  return {
+    moralisApiKey: process.env['MORALIS_API_KEY'] || '',
+    browserCashApiKey: process.env['BROWSER_CASH_API_KEY'] || '',
+    agentCashApiKey: process.env['AGENT_CASH_API_KEY'] || '',
+    solanaPrivateKey: process.env['SOLANA_PRIVATE_KEY'] || '',
+  };
 }
 

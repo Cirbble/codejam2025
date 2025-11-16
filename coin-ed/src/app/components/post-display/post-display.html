@@ -37,7 +37,7 @@
     </div>
 
     <div class="comments-section">
-      <h4 class="comments-header">Comments ({{ post.comments?.length || 0 }})</h4>
+      <h4 class="comments-header">Comments ({{ post.comments.length || 0 }})</h4>
       @if (post.comments && post.comments.length > 0) {
         <div class="comments-list">
           @for (comment of getVisibleComments(); track $index) {

@@ -6,7 +6,6 @@ import { DataLoaderService } from '../../services/data-loader.service';
 import { ControlPanelComponent } from '../control-panel/control-panel.component';
 import { CoinCardComponent } from '../coin-card/coin-card.component';
 import { PortfolioComponent } from '../portfolio/portfolio.component';
-import { ChartComponent } from '../chart/chart.component';
 import { PostDisplayComponent } from '../post-display/post-display';
 
 @Component({
@@ -17,7 +16,6 @@ import { PostDisplayComponent } from '../post-display/post-display';
     ControlPanelComponent,
     CoinCardComponent,
     PortfolioComponent,
-    ChartComponent,
     PostDisplayComponent
   ],
   templateUrl: './dashboard.component.html',
@@ -88,20 +86,20 @@ export class DashboardComponent {
     const hype = coin.hype || 0.5;  // Default to neutral
     const communityHype = coin.communityHype || 0.5;
     const popularity = coin.popularity || 0.5;
-    
+
     // All values already in 0-1 range
     // Calculate weighted average
     let confidence = (hype * 0.3) + (communityHype * 0.5) + (popularity * 0.2);
-    
+
     // Apply inverse bell curve transformation (U-shape)
     // This pushes values away from 0.5 (middle) toward 0 or 1 (extremes)
     const center = 0.5;
     const distanceFromCenter = Math.abs(confidence - center);
-    
+
     // Amplify distance from center using power function
     // Values near 0.5 get pushed toward extremes
     const amplifiedDistance = Math.pow(distanceFromCenter * 2, 1.4) / 2;
-    
+
     if (confidence < center) {
       // Push down toward 0
       confidence = center - amplifiedDistance;
@@ -109,10 +107,10 @@ export class DashboardComponent {
       // Push up toward 1
       confidence = center + amplifiedDistance;
     }
-    
+
     // Ensure bounds
     confidence = Math.max(0, Math.min(1, confidence));
-    
+
     // Convert to percentage
     return Math.round(confidence * 100);
   }
@@ -133,7 +131,7 @@ export class DashboardComponent {
     if (coin.recommendation) {
       return coin.recommendation;
     }
-    
+
     // Otherwise calculate it
     const confidence = this.getConfidenceScore(coin);
     if (confidence >= 75) return 'BUY';
