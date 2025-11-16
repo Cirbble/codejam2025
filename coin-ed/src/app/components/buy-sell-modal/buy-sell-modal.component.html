@@ -1,0 +1,53 @@
+@if (isOpen()) {
+  <div class="modal-overlay" (click)="closeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ agentType() === 'buyer' ? 'AI Buyer' : 'AI Seller' }} Agent</h2>
+        <button class="close-btn" (click)="closeModal()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="instruction">Select an action for the {{ agentType() === 'buyer' ? 'AI Buyer' : 'AI Seller' }} agent:</p>
+        
+        <div class="action-buttons">
+          <button 
+            class="action-btn buy-btn" 
+            [class.selected]="selectedAction() === 'buy'"
+            (click)="selectAction('buy')">
+            <span class="icon">📈</span>
+            <span class="label">Buy</span>
+          </button>
+          
+          <button 
+            class="action-btn sell-btn" 
+            [class.selected]="selectedAction() === 'sell'"
+            (click)="selectAction('sell')">
+            <span class="icon">📉</span>
+            <span class="label">Sell</span>
+          </button>
+        </div>
+
+        @if (generatedMessage()) {
+          <div class="message-container">
+            <div class="message-header">
+              <span class="message-icon">🤖</span>
+              <span class="message-title">Agent Message</span>
+            </div>
+            <div class="message-content">
+              {{ generatedMessage() }}
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="modal-footer">
+        @if (selectedAction()) {
+          <button class="confirm-btn" (click)="confirmAction()">
+            Confirm {{ selectedAction() === 'buy' ? 'Buy' : 'Sell' }} Action
+          </button>
+        }
+        <button class="cancel-btn" (click)="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+}
