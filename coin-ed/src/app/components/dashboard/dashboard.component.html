@@ -87,14 +87,14 @@
       <!-- Selected Coin Details or Overview -->
       @if (selectedCoinId && getSelectedCoin()) {
         <section class="selected-coin-view">
-          <app-coin-card [coin]="getSelectedCoin()!"></app-coin-card>
+          <app-coin-card [coin]="getSelectedCoin()!" [hideActionButton]="true"></app-coin-card>
           <app-post-display [post]="getSelectedCoin()!.latestPost"></app-post-display>
         </section>
       } @else {
         <!-- Coin Cards Grid -->
         <section class="coins-grid">
           @for (coin of dataService.coins(); track coin.id) {
-            <app-coin-card [coin]="coin"></app-coin-card>
+            <app-coin-card [coin]="coin" (viewDetails)="selectCoin($event.id)"></app-coin-card>
           }
           @empty {
             <div class="empty-state">
