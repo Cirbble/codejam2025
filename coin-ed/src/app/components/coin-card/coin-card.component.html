@@ -9,11 +9,13 @@
         <p>{{ coin.symbol }}</p>
       </div>
     </div>
-    <button class="action-btn" [class.positive]="coin.changePercentage > 0">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M5 15L15 5M15 5H8M15 5V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
+    @if (!hideActionButton) {
+      <button class="action-btn" [class.positive]="coin.changePercentage > 0" (click)="onViewDetails()" title="View Details">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M5 15L15 5M15 5H8M15 5V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    }
   </div>
 
   <div class="coin-balance">
@@ -27,15 +29,36 @@
     </span>
   </div>
 
-  <div class="mini-chart">
-    <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-      <polyline
-        [attr.points]="generateChartPoints()"
-        fill="none"
-        [attr.stroke]="coin.changePercentage > 0 ? '#FFD700' : '#888'"
-        stroke-width="2"
-      />
-    </svg>
-  </div>
+  @if (coin.hype !== undefined || coin.communityHype !== undefined || coin.popularity !== undefined) {
+    <div class="sentiment-section">
+      <div class="sentiment-header">
+        <h4>Sentiment Analysis</h4>
+      </div>
+      <div class="gauges-grid">
+        @if (coin.hype !== undefined) {
+          <app-gauge [value]="coin.hype" label="Hype" color="#8B5CF6"></app-gauge>
+        }
+        @if (coin.communityHype !== undefined) {
+          <app-gauge [value]="coin.communityHype" label="Community" color="#6B8AFF"></app-gauge>
+        }
+        @if (coin.popularity !== undefined) {
+          <app-gauge [value]="coin.popularity" label="Popularity" color="#00d4aa"></app-gauge>
+        }
+      </div>
+      <div class="confidence-bar">
+        <div class="confidence-label">
+          <span>Overall Confidence</span>
+          <span class="confidence-value">{{ (calculateConfidence() * 100).toFixed(0) }}%</span>
+        </div>
+        <div class="confidence-track">
+          <div 
+            class="confidence-fill" 
+            [style.width.%]="calculateConfidence() * 100"
+            [style.background]="getConfidenceColor()"
+          ></div>
+        </div>
+      </div>
+    </div>
+  }
 </div>
 

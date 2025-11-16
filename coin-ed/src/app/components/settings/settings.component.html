@@ -1,0 +1,105 @@
+<div class="settings-container">
+  <!-- Notification Message -->
+  @if (notification()) {
+    <div class="notification" [class.success]="notification()?.type === 'success'" [class.error]="notification()?.type === 'error'">
+      {{ notification()?.message }}
+    </div>
+  }
+
+  <div class="settings-card">
+    <!-- Header with back button -->
+    <div class="settings-header">
+      <button class="back-btn" (click)="goBack()" title="Back to Dashboard">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      
+      <h1 class="settings-title">{{ isLoginMode() ? 'Log in' : 'Sign up' }}</h1>
+      
+      <div class="header-spacer"></div>
+    </div>
+
+    <!-- Account Details Section -->
+    <div class="settings-content">
+      <h2 class="section-title">Account details</h2>
+
+      <form [formGroup]="accountForm" class="account-form">
+        <!-- Email Address -->
+        <div class="form-group">
+          <label class="form-label">Email address:</label>
+          <input 
+            type="email" 
+            formControlName="email"
+            class="form-input"
+            placeholder="Enter email"
+            [disabled]="isSignedIn()"
+          >
+        </div>
+
+        @if (!isLoginMode()) {
+          <!-- Card Number -->
+          <div class="form-group">
+            <label class="form-label">Card number:</label>
+            <input 
+              type="text" 
+              formControlName="cardNumber"
+              class="form-input"
+              placeholder="1234 5678 9012 3456"
+              maxlength="16"
+            >
+          </div>
+
+          <!-- Date of Expiration -->
+          <div class="form-group">
+            <label class="form-label">Date of expiration:</label>
+            <input 
+              type="text" 
+              formControlName="expirationDate"
+              class="form-input"
+              placeholder="MM/YY"
+              maxlength="5"
+            >
+          </div>
+
+          <!-- Name of Holder -->
+          <div class="form-group">
+            <label class="form-label">Name of holder:</label>
+            <input 
+              type="text" 
+              formControlName="cardHolder"
+              class="form-input"
+              placeholder="John Doe"
+            >
+          </div>
+
+          <!-- CVV -->
+          <div class="form-group cvv-group">
+            <label class="form-label">CVV:</label>
+            <input 
+              type="text" 
+              formControlName="cvv"
+              class="form-input cvv-input"
+              placeholder="123"
+              maxlength="4"
+            >
+          </div>
+        }
+      </form>
+
+      <!-- Sign In Button at Bottom -->
+      <div class="bottom-actions">
+        @if (!isSignedIn()) {
+          <button type="button" class="sign-in-btn-bottom" (click)="signIn()">
+            {{ isLoginMode() ? 'Log in' : 'Sign up' }}
+          </button>
+          <button type="button" class="toggle-mode-btn" (click)="toggleMode()">
+            {{ isLoginMode() ? 'Need an account? Sign up' : 'Already have an account? Log in' }}
+          </button>
+        } @else {
+          <div class="signed-in-message">✓ Successfully signed in</div>
+        }
+      </div>
+    </div>
+  </div>
+</div>

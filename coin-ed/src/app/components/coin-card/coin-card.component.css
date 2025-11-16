@@ -130,14 +130,59 @@
   background: rgba(255, 107, 107, 0.1);
 }
 
-.mini-chart {
-  height: 60px;
-  margin-top: 12px;
-  opacity: 0.7;
+.sentiment-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.mini-chart svg {
-  width: 100%;
+.sentiment-header h4 {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gauges-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.confidence-bar {
+  margin-top: 16px;
+}
+
+.confidence-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.confidence-value {
+  color: #fff;
+  font-size: 14px;
+}
+
+.confidence-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.confidence-fill {
   height: 100%;
+  border-radius: 4px;
+  transition: width 0.8s ease, background 0.3s ease;
+  box-shadow: 0 0 10px currentColor;
 }
-

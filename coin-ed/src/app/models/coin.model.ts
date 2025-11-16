@@ -8,6 +8,26 @@ export interface Coin {
   changePercentage: number;
   chartData?: number[];
   icon?: string;
+  hype?: number; // raw_sentiment_score
+  communityHype?: number; // aggregate_sentiment_score
+  popularity?: number; // engagement_score
+  confidence?: number; // calculated from the three scores
+  latestPost?: CoinPost;
+}
+
+export interface CoinPost {
+  id: number;
+  source: string;
+  platform: string;
+  title: string;
+  content: string;
+  author: string;
+  timestamp: string;
+  post_age: string;
+  upvotes_likes: number;
+  comment_count: number;
+  comments: string[];
+  link: string;
 }
 
 export interface Portfolio {

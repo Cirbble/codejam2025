@@ -1,9 +1,9 @@
 <div class="control-panel">
-  <h3>AI Agent Controls</h3>
   <div class="controls">
+    <!-- Web Scraper Toggle -->
     <div class="control-item">
       <label class="toggle-label">
-        <span>Web Scraper</span>
+        <span class="control-name">Web Scraper</span>
         <label class="toggle-switch">
           <input
             type="checkbox"
@@ -18,13 +18,20 @@
       </span>
     </div>
 
-    <div class="control-item">
-      <label class="toggle-label">
-        <span>AI Buyer Agent</span>
+    <!-- AI Buyer Agent Toggle (Locked unless scraper is on) -->
+    <div class="control-item" [class.locked]="!dataService.agentControls().scraperEnabled">
+      <label class="toggle-label" [class.disabled]="!dataService.agentControls().scraperEnabled">
+        <span class="control-name">
+          AI Buyer
+          @if (!dataService.agentControls().scraperEnabled) {
+            <span class="lock-icon">LOCKED</span>
+          }
+        </span>
         <label class="toggle-switch">
           <input
             type="checkbox"
             [checked]="dataService.agentControls().buyerEnabled"
+            [disabled]="!dataService.agentControls().scraperEnabled"
             (change)="onBuyerToggle()"
           />
           <span class="slider"></span>
@@ -35,13 +42,20 @@
       </span>
     </div>
 
-    <div class="control-item">
-      <label class="toggle-label">
-        <span>AI Seller Agent</span>
+    <!-- AI Seller Agent Toggle (Locked unless scraper is on) -->
+    <div class="control-item" [class.locked]="!dataService.agentControls().scraperEnabled">
+      <label class="toggle-label" [class.disabled]="!dataService.agentControls().scraperEnabled">
+        <span class="control-name">
+          AI Seller
+          @if (!dataService.agentControls().scraperEnabled) {
+            <span class="lock-icon">LOCKED</span>
+          }
+        </span>
         <label class="toggle-switch">
           <input
             type="checkbox"
             [checked]="dataService.agentControls().sellerEnabled"
+            [disabled]="!dataService.agentControls().scraperEnabled"
             (change)="onSellerToggle()"
           />
           <span class="slider"></span>

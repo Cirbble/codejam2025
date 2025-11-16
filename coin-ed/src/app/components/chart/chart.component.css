@@ -103,8 +103,8 @@
 }
 
 .timeframe-btn.active {
-  background: #FFD700;
-  color: #000;
+  background: linear-gradient(135deg, #6B8AFF, #8B5CF6);
+  color: #fff;
 }
 
 .chart-container {

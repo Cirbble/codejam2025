@@ -15,16 +15,35 @@ export class ControlPanelComponent {
   onScraperToggle(): void {
     this.dataService.toggleScraper();
     console.log('Scraper toggled:', this.dataService.agentControls().scraperEnabled);
+
+    // If scraper is turned off, also turn off buyer and seller
+    if (!this.dataService.agentControls().scraperEnabled) {
+      const controls = this.dataService.agentControls();
+      if (controls.buyerEnabled || controls.sellerEnabled) {
+        this.dataService.agentControls.set({
+          scraperEnabled: false,
+          buyerEnabled: false,
+          sellerEnabled: false
+        });
+        console.log('Buyer and Seller disabled due to scraper being turned off');
+      }
+    }
   }
 
   onBuyerToggle(): void {
-    this.dataService.toggleBuyer();
-    console.log('Buyer toggled:', this.dataService.agentControls().buyerEnabled);
+    // Only allow toggle if scraper is enabled
+    if (this.dataService.agentControls().scraperEnabled) {
+      this.dataService.toggleBuyer();
+      console.log('Buyer toggled:', this.dataService.agentControls().buyerEnabled);
+    }
   }
 
   onSellerToggle(): void {
-    this.dataService.toggleSeller();
-    console.log('Seller toggled:', this.dataService.agentControls().sellerEnabled);
+    // Only allow toggle if scraper is enabled
+    if (this.dataService.agentControls().scraperEnabled) {
+      this.dataService.toggleSeller();
+      console.log('Seller toggled:', this.dataService.agentControls().sellerEnabled);
+    }
   }
 }
 

@@ -1,0 +1,41 @@
+<div class="gauge-container">
+  <div class="gauge">
+    <svg viewBox="0 0 100 60" class="gauge-svg">
+      <!-- Background arc -->
+      <path
+        d="M 10 50 A 40 40 0 0 1 90 50"
+        fill="none"
+        stroke="rgba(255, 255, 255, 0.1)"
+        stroke-width="8"
+        stroke-linecap="round"
+      />
+      <!-- Colored arc based on value -->
+      <path
+        d="M 10 50 A 40 40 0 0 1 90 50"
+        fill="none"
+        [attr.stroke]="color"
+        stroke-width="8"
+        stroke-linecap="round"
+        [attr.stroke-dasharray]="125.6"
+        [attr.stroke-dashoffset]="125.6 - (value * 125.6)"
+        class="gauge-progress"
+      />
+      <!-- Center needle -->
+      <g [attr.transform]="'translate(50, 50) rotate(' + ((value * 180) - 90) + ')'">
+        <line
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="-35"
+          stroke="#fff"
+          stroke-width="2"
+          stroke-linecap="round"
+          class="gauge-needle"
+        />
+        <circle cx="0" cy="0" r="3" fill="#fff" />
+      </g>
+    </svg>
+  </div>
+  <div class="gauge-label">{{ label }}</div>
+  <div class="gauge-value">{{ getPercentage() }}%</div>
+</div>
