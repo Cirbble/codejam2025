@@ -104,12 +104,7 @@ export class BuySellModalComponent {
       // Wait a bit before showing success message
       setTimeout(() => {
         this.showSuccess.set(true);
-        
-        // Close modal after showing success message
-        setTimeout(() => {
-          this.closeModal();
-        }, 2000);
-      }, 5000);
+      }, 2000);
     }
   }
 }

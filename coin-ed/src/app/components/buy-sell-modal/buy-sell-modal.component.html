@@ -25,6 +25,7 @@
 
         @if (showSuccess()) {
           <div class="success-container">
+            <button class="success-close-btn" (click)="closeModal()">×</button>
             <div class="success-title">{{ selectedAction() === 'buy' ? 'Successfully bought!' : 'Successfully sold!' }}</div>
             <div class="currencies-list">
               <div class="currencies-label">Currencies:</div>
