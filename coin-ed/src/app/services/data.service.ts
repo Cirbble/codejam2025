@@ -357,7 +357,9 @@ export class DataService {
    */
   fetchAllPumpPortalPrices(): void {
     const coins = this.coins();
+    console.log(`[Refresh] Fetching latest prices for ${coins.length} coins...`);
     coins.forEach(coin => {
+      console.log(`[Refresh] → ${coin.symbol}: requesting price...`);
       this.fetchPumpPortalPrice(coin.symbol);
     });
   }

@@ -47,7 +47,8 @@ export class DashboardComponent {
   }
 
   refreshPrices(): void {
-    console.log('Fetching prices from PumpPortal...');
+    const count = this.dataService.coins().length;
+    console.log(`[Refresh] Starting price refresh for ${count} coins...`);
     this.dataService.fetchAllPumpPortalPrices();
   }
 
@@ -154,4 +155,3 @@ export class DashboardComponent {
     }
   }
 }
-
