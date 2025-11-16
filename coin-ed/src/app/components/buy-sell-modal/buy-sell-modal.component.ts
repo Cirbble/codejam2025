@@ -95,7 +95,7 @@ export class BuySellModalComponent {
         setTimeout(() => {
           this.closeModal();
         }, 2000);
-      }, 1500);
+      }, 5000);
     }
   }
 }
