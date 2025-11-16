@@ -26,7 +26,15 @@
         @if (showSuccess()) {
           <div class="success-container">
             <div class="success-icon">✅</div>
-            <div class="success-message">{{ successMessage() }}</div>
+            <div class="success-title">{{ selectedAction() === 'buy' ? 'Successfully bought!' : 'Successfully sold!' }}</div>
+            <div class="currencies-list">
+              <div class="currencies-label">Currencies:</div>
+              <div class="currencies-items">
+                @for (currency of currencies(); track currency) {
+                  <span class="currency-badge">{{ currency }}</span>
+                }
+              </div>
+            </div>
           </div>
         }
       </div>

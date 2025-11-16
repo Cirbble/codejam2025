@@ -18,6 +18,7 @@ export class BuySellModalComponent {
   generatedMessage = signal<string>('');
   successMessage = signal<string>('');
   showSuccess = signal(false);
+  currencies = signal<string[]>([]);
 
   close = output<void>();
   actionSelected = output<{ agentType: AgentType; action: ActionType }>();
@@ -28,6 +29,7 @@ export class BuySellModalComponent {
     this.generatedMessage.set('');
     this.successMessage.set('');
     this.showSuccess.set(false);
+    this.currencies.set([]);
     this.isOpen.set(true);
     
     // Auto-select the action based on agent type
@@ -41,12 +43,25 @@ export class BuySellModalComponent {
     this.generatedMessage.set('');
     this.successMessage.set('');
     this.showSuccess.set(false);
+    this.currencies.set([]);
     this.close.emit();
   }
 
   selectAction(action: ActionType): void {
     this.selectedAction.set(action);
     this.generateMessage(action);
+  }
+
+  private generateRandomCurrencies(): string[] {
+    const availableCurrencies = [
+      'BTC', 'ETH', 'SOL', 'DOGE', 'PEPE', 'SHIB', 'BONK', 'WIF',
+      'ADA', 'DOT', 'MATIC', 'AVAX', 'LINK', 'UNI', 'AAVE', 'ATOM'
+    ];
+    
+    // Generate 2-5 random currencies
+    const count = Math.floor(Math.random() * 4) + 2; // 2 to 5
+    const shuffled = [...availableCurrencies].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
   }
 
   private generateMessage(action: ActionType): void {
@@ -82,14 +97,13 @@ export class BuySellModalComponent {
         action: action
       });
       
+      // Generate random currencies
+      const selectedCurrencies = this.generateRandomCurrencies();
+      this.currencies.set(selectedCurrencies);
+      
       // Wait a bit before showing success message
       setTimeout(() => {
         this.showSuccess.set(true);
-        this.successMessage.set(
-          action === 'buy' 
-            ? '✅ Successfully bought!' 
-            : '✅ Successfully sold!'
-        );
         
         // Close modal after showing success message
         setTimeout(() => {
